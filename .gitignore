@@ -1,0 +1,10 @@
+.env
+test.py 
+src/__pycache__
+*/__pycache__
+*/output.svg
+*.svg 
+.venv 
+*/.venv 
+*.log 
+.python-version
