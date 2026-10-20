@@ -16,7 +16,7 @@ SLUG_MAP = {
     "OAuth2": "auth0",
     "PostgreSQL": "postgresql",
     "MySQL": "mysql",
-    "H2 Database": "h2",
+    "H2 Database": "h2database",
     "OpenAPI / Swagger": "swagger",
     "JWT": "jsonwebtokens",
     "Jackson": "spring",
@@ -25,20 +25,25 @@ SLUG_MAP = {
     "Apache HttpClient": "apache",
     "MapStruct": "spring",
     "Apache Kafka": "apachekafka",
+    "gRPC": "grpc",
+    "Docker": "docker",
     # Python — web
     "FastAPI": "fastapi",
     "Flask": "flask",
     "Django": "django",
-    "Starlette": "python",
+    "Starlette": "starlette",
     "Tornado": "tornado",
-    "Uvicorn": "python",
+    "Uvicorn": "uvicorn",
     "Gunicorn": "gunicorn",
+    "Jinja": "jinja",
+    "Jinja2": "jinja",
+    "Git": "git",
     # Python — data / ML
     "SQLAlchemy": "sqlalchemy",
     "Tortoise ORM": "python",
-    "Alembic": "python",
+    "Alembic": "alembic",
     "Qdrant": "qdrant",
-    "ChromaDB": "python",
+    "ChromaDB": "chroma",
     "Pinecone": "pinecone",
     "Weaviate": "weaviate",
     "NumPy": "numpy",
@@ -58,7 +63,7 @@ SLUG_MAP = {
     "Anthropic": "anthropic",
     "LangChain": "langchain",
     "LangGraph": "langchain",
-    "LlamaIndex": "llamaindex",
+    "LlamaIndex": "llama-index",
     "Hugging Face": "huggingface",
     "Pydantic": "pydantic",
     "Celery": "celery",
@@ -67,9 +72,13 @@ SLUG_MAP = {
     "HTTPX": "httpx",
     "Requests": "pypi",
     "Aiohttp": "aiohttp",
-    "AWS SDK": "awswebservices",
+    "AWS SDK": "amazonwebservices",
     "Stripe": "stripe",
+    "Google": "google",
+    "Google Cloud": "googlecloud",
     "Google Gemini": "googlegemini",
+    "Oracle": "oracle",
+    "SonarQube": "sonarqube",
     # JS/TS — frontend frameworks
     "React": "react",
     "Next.js": "nextdotjs",
@@ -169,8 +178,19 @@ NOISE_PYTHON = {
     "tqdm",  # progress bars
     "h11", "httplib2", "oauthlib", "proto-plus", 
     "pyasn1", "pyasn1_modules", "pyparsing", "annotated-types", "annotated-doc",
-    "cachetools", "google-api-core", "google-api-python-client",
-    "google-auth-httplib2", "google-auth-oauthlib", "googleapis-common-protos",
+    # Low-level serialization, parsing & type helpers
+    "typing-inspection", "typing_extensions", "eval-type-backport", "tzdata", "pytz", "python-dateutil",
+    "markupsafe", "jiter", "orjson", "ormsgpack", "flatbuffers", "fastavro",
+    "jsonschema", "jsonschema-specifications", "jsonpointer", "jsonpatch", "dirtyjson",
+    "tenacity", "backoff", "aiolimiter", "aiohappyeyeballs", "httptools", "hpack", "hyperframe",
+    "humanfriendly", "coloredlogs", "click-didyoumean", "click-plugins", "click-repl",
+    "billiard", "amqp", "kombu", "fsspec", "blobfile", "filetype", "smmap",
+    "importlib-metadata", "importlib-resources", "email-validator", "uritemplate",
+    "rpds-py", "xxhash", "zstandard", "cffi", "ecdsa", "rsa", "distro", "pyyml", "defusedxml",
+    "soupsieve", "dataclasses-json", "dataclasses_json", "durationpy",
+    # Google transport & auth plumbing
+    "google-auth", "google-auth-httplib2", "google-auth-oauthlib",
+    "google-api-core", "googleapis-common-protos", "google-ai-generativelanguage",
 }
 
 NOISE_GO = {
@@ -220,6 +240,8 @@ NOISE_TS = {
     # Dev utilities
     "nodemon", "ts-node-dev", "concurrently", "rimraf", "cross-env",
     "dotenv", "dotenv-cli", "env-cmd",
+    "npm-check-updates", "patch-package", "madge", "vite-plugin-eslint", "use-stick-to-bottom", "tokenlens",
+    "eventsource-parser", "lru-cache", "nanoid",
     # Runtime shims / low-level
     "tslib", "core-js", "object-assign",
     # Storybook
@@ -295,8 +317,27 @@ NORM_JAVA = {
     # JWT
     "jjwt-api": "JWT",
     "jjwt-impl": "JWT",
+    "jjwt-jackson": "JWT",
     "io.jsonwebtoken:jjwt-jackson": "JWT",
     "java-jwt": "JWT",
+    # gRPC & Protobuf
+    "grpc-protobuf": "gRPC",
+    "grpc-netty-shaded": "gRPC",
+    "grpc-spring-boot-starter": "gRPC",
+    "grpc-stub": "gRPC",
+    "protobuf-maven-plugin": "Google",
+    "firebase-admin": "Google",
+    # Spring extras
+    "spring-boot-starter": "Spring Boot",
+    "spring-boot-starter-graphql": "Spring Boot",
+    "spring-graphql-test": "Spring Boot",
+    "spring-cloud-starter-gateway": "Spring Boot",
+    "spring-cloud-dependencies": "Spring Boot",
+    "spring-kafka-test": "Apache Kafka",
+    "aws-cdk-lib": "AWS SDK",
+    "aws-java-sdk": "AWS SDK",
+    "ojdbc11": "Oracle",
+    "sonar-maven-plugin": "SonarQube",
     # HTTP & serialisation
     "jackson-databind": "Jackson",
     "jackson-core": "Jackson",
@@ -307,18 +348,31 @@ NORM_JAVA = {
     "httpclient5": "Apache HttpClient",
     # Mapping & Protobuf
     "mapstruct": "MapStruct",
-    "protobuf-java": "google",
+    "protobuf-java": "Google",
 }
 
 NORM_PY = {
     # Web Frameworks & Servers
     "fastapi": "FastAPI",
+    "fastapi-cli": "FastAPI",
+    "python-multipart": "FastAPI",
+    "httpx-sse": "HTTPX",
     "flask": "Flask",
+    "flask-wtf": "Flask",
+    "flask-login": "Flask",
+    "flask-mail": "Flask",
+    "flask-bcrypt": "Flask",
+    "flask-sqlalchemy": "Flask",
+    "wtforms": "Flask",
     "django": "Django",
     "starlette": "Starlette",
     "tornado": "Tornado",
     "uvicorn": "Uvicorn",
     "gunicorn": "Gunicorn",
+    "jinja2": "Jinja",
+    "jinja": "Jinja",
+    "docker": "Docker",
+    "docker-compose": "Docker",
     # Databases — PostgreSQL
     "psycopg2": "PostgreSQL",
     "psycopg2-binary": "PostgreSQL",
@@ -380,10 +434,21 @@ NORM_PY = {
     "langchain-google-genai": "LangChain",
     "langchain-chroma": "LangChain",
     "langchain-pinecone": "LangChain",
+    "langsmith": "LangChain",
+    "langchain-huggingface": "LangChain",
+    "langchain-gemini": "LangChain",
+    "langchain-text-splitters": "LangChain",
     "langgraph": "LangGraph",
+    "langgraph-checkpoint-sqlite": "LangGraph",
+    "langgraph-sdk": "LangGraph",
+    "langgraph-prebuilt": "LangGraph",
+    "langgraph-checkpoint": "LangGraph",
     "llama-index": "LlamaIndex",
     "llama-index-core": "LlamaIndex",
     "llama-index-llms-openai": "LlamaIndex",
+    "llama-cloud": "LlamaIndex",
+    "llama-index-cli": "LlamaIndex",
+    "llama-cloud-services": "LlamaIndex",
     "transformers": "Hugging Face",
     "huggingface-hub": "Hugging Face",
     "datasets": "Hugging Face",
@@ -391,11 +456,15 @@ NORM_PY = {
     "diffusers": "Hugging Face",
     "peft": "Hugging Face",
     "trl": "Hugging Face",
-    # Google AI
+    # Google AI & Cloud / APIs
     "google-generativeai": "Google Gemini",
     "google-genai": "Google Gemini",
     "vertexai": "Google Gemini",
     "google-cloud-aiplatform": "Google Gemini",
+    "google-api-python-client": "Google",
+    "google-cloud-storage": "Google Cloud",
+    "google-cloud-core": "Google Cloud",
+    "axois": "Axios",
     # AWS
     "boto3": "AWS SDK",
     "botocore": "AWS SDK",
@@ -405,8 +474,15 @@ NORM_PY = {
     "stripe": "Stripe",
     # Serialization, validation & tasks
     "pydantic": "Pydantic",
+    "pydantic_core": "Pydantic",
+    "pydantic-core": "Pydantic",
     "pydantic-settings": "Pydantic",
     "pydantic-v1": "Pydantic",
+    "gitpython": "Git",
+    "gitdb": "Git",
+    "git-filter-repo": "Git",
+    "grpcio": "gRPC",
+    "grpcio-status": "gRPC",
     "celery": "Celery",
     "rq": "RQ",
     "taskiq": "Taskiq",
@@ -436,6 +512,8 @@ NOISE_JAVA = {
     "log4j-api", "log4j-core", "log4j-slf4j-impl",
     # Bytecode manipulation
     "byte-buddy", "byte-buddy-agent", "cglib", "asm",
+    # Test & runtime utilities
+    "annotations-api", "javafaker", "reactor-test", "rest-assured",
 }
 
 
@@ -491,6 +569,12 @@ NORM_TS = {
     "mui": "Material UI",       # @mui/* → "mui" after clean
     "shadcn-ui": "ShadCN",
     "shadcn": "ShadCN",
+    "cmdk": "ShadCN",
+    "sonner": "React",
+    "react-responsive": "React",
+    "react-infinite-scroll-component": "React",
+    "monaco-editor": "React",
+    "dockerode": "Docker",
     "radix-ui": "Radix UI",     # @radix-ui/* → "radix-ui" after clean
     "styled-components": "Styled Components",
     "emotion": "Styled Components",   # @emotion/* → "emotion" after clean
@@ -543,12 +627,30 @@ NORM_TS = {
     "yup": "Yup",
     "valibot": "Zod",           # same category as Zod
     "axios": "Axios",
+    "axois": "Axios",
     "socket.io": "Socket.io",
     "socket.io-client": "Socket.io",
     "lodash": "Lodash",
     "lodash-es": "Lodash",
     "date-fns": "React",        # date utility almost always with React
     "dayjs": "React",
+    # --- Markdown & Content ---
+    "remark": "Remark",
+    "remark-parse": "Remark",
+    "remark-stringify": "Remark",
+    "remark-gfm": "Remark",
+    "remark-math": "Remark",
+    "remark-breaks": "Remark",
+    "remark-html": "Remark",
+    "remark-rehype": "Remark",
+    "rehype": "Remark",
+    "rehype-highlight": "Remark",
+    "rehype-katex": "Remark",
+    "rehype-mathjax": "Remark",
+    "rehype-stringify": "Remark",
+    "rehype-raw": "Remark",
+    "react-markdown": "Remark",
+    "unified": "Remark",
 }
 pkg_to_lang = {
     # Python manifests & lock files
@@ -578,10 +680,15 @@ NORM = {"java": NORM_JAVA, "py": NORM_PY, "ts": NORM_TS}
 
 
 TARGETS = [
-                "package.json",
-                "pyproject.toml",
-                "requirements.txt",
-                "pom.xml",
+    "package.json",
+    "pyproject.toml",
+    "requirements.txt",
+    "pom.xml",
+    "Dockerfile",
+    "dockerfile",
+    "docker-compose.yml",
+    "docker-compose.yaml",
+    "compose.yaml",
 ]
 
 

@@ -8,3 +8,6 @@ src/__pycache__
 */.venv 
 *.log 
 .python-version
+failed_icons.csv
+filtered_packages.csv
+output.csv 

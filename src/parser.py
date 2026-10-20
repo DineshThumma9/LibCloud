@@ -1,7 +1,9 @@
+import csv
+import logging
 import re
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 from urllib.parse import urlparse
 
 from constants import (
@@ -13,7 +15,7 @@ from constants import (
 )
 from models import ProjectLinks, PKGInfo
 
-can: set[str] = set()
+log = logging.getLogger(__name__)
 
 FILE_REGEX = {
     "requirements.txt": [
@@ -53,70 +55,83 @@ FILE_REGEX = {
 }
 
 
-def process(pkg_content: str, pkg_origin: str) -> defaultdict[str, PKGInfo]:
-    pkg_dic = defaultdict(PKGInfo)
-    for cfg in FILE_REGEX.get(pkg_origin, []):
-        text = pkg_content
-        if cfg["block"] is not None:
-            text = "\n".join(cfg["block"].findall(pkg_content))
-        for raw in cfg["name"].findall(text):
-            if isinstance(raw, tuple):      # pom.xml's (groupId, artifactId)
-                raw = ":".join(raw)
-            norm, lang = normalize_pkg(raw, pkg_origin)
-            if norm and lang:
-                pkg = pkg_dic[norm]
-                pkg.count += 1
-                pkg.dep_origin = lang
-                pkg.raw_names.add(raw)
-    return pkg_dic
 
 
-def normalize_pkg(dep_name: str, dep_origin: str) -> tuple[Optional[str], Optional[str]]:
-    fname = Path(dep_origin).name
-    lang = pkg_to_lang.get(fname)
-    if not lang:
-        return None, None
-    func = clean_pkg.get(lang)
-    cln_pkg = func(dep_name) if func else dep_name
-    if cln_pkg in NOISE.get(lang, set()):
-        can.add(cln_pkg)
-        return None, None
-    norm_name = NORM.get(lang, {}).get(cln_pkg, cln_pkg)
-    return norm_name, lang
+class DependencyParser:
 
+    def __init__(self):
+        self.can: set[str] = set()
+        self.can_records: list[dict] = []
+        self._seen_filtered: set[tuple[str, str, str]] = set()
 
-def parse_urls_to_links(urls: list[str]) -> ProjectLinks:
-    custom_domain = None
-    github_owner = None
-    for url in urls:
-        if not url or not isinstance(url, str):
-            continue
+    def parser(self, pkg_content: str, pkg_origin: str) -> defaultdict[str, PKGInfo]:
+        pkg_dic = defaultdict(PKGInfo)
+        for cfg in FILE_REGEX.get(pkg_origin, []):
+            text = pkg_content
+            if cfg["block"] is not None:
+                text = "\n".join(cfg["block"].findall(pkg_content))
+            for raw in cfg["name"].findall(text):
+                if isinstance(raw, tuple):      # pom.xml's (groupId, artifactId)
+                    raw = ":".join(raw)
+                norm, lang = self.normalize_pkg(raw, pkg_origin)
+                if norm and lang:
+                    pkg = pkg_dic[norm]
+                    pkg.count += 1
+                    pkg.dep_origin = lang
+                    pkg.raw_names.add(raw)
+        return pkg_dic
 
-        clean = re.sub(r"^git\+?", "", url).strip()
-        if not clean:
-            continue
+    parse = parser
+    process = parser
 
-        if not clean.startswith(("http://", "https://")):
-            clean = f"https://{clean.lstrip('/')}"
+    def normalize_pkg(self, dep_name: str, dep_origin: str) -> tuple[Optional[str], Optional[str]]:
+        fname = Path(dep_origin).name
+        lang = pkg_to_lang.get(fname)
+        if not lang:
+            record_key = (dep_name, dep_name, dep_origin)
+            if record_key not in self._seen_filtered:
+                self._seen_filtered.add(record_key)
+                self.can_records.append({
+                    "raw_name": dep_name,
+                    "cleaned_name": dep_name,
+                    "norm_name": "",
+                    "dep_origin": fname,
+                    "origin_path": dep_origin,
+                    "language": "unknown",
+                    "reason": "unsupported_manifest",
+                })
+            return None, None
 
-        try:
-            parsed = urlparse(clean)
-            host = parsed.netloc.lower()
-            if ":" in host:
-                host = host.split(":")[0]
-            if host.startswith("www."):
-                host = host[4:]
+        func = clean_pkg.get(lang)
+        cln_pkg = func(dep_name) if func else dep_name
+        if cln_pkg in NOISE.get(lang, set()):
+            self.can.add(cln_pkg)
+            record_key = (dep_name, cln_pkg, dep_origin)
+            if record_key not in self._seen_filtered:
+                self._seen_filtered.add(record_key)
+                self.can_records.append({
+                    "raw_name": dep_name,
+                    "cleaned_name": cln_pkg,
+                    "norm_name": "",
+                    "dep_origin": fname,
+                    "origin_path": dep_origin,
+                    "language": lang,
+                    "reason": "noise_blocklist",
+                })
+            return None, None
+        norm_name = NORM.get(lang, {}).get(cln_pkg, cln_pkg)
+        return norm_name, lang
 
-            if "github.com" in host and not github_owner:
-                path_parts = [p for p in parsed.path.strip("/").split("/") if p]
-                if len(path_parts) >= 1:
-                    github_owner = path_parts[0]
-                continue
+    def export_filtered_csv(self, filepath: Union[str, Path] = "filtered_packages.csv") -> Path:
+        out_path = Path(filepath)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=["raw_name", "cleaned_name", "norm_name", "dep_origin", "language", "reason", "origin_path"]
+            )
+            writer.writeheader()
+            writer.writerows(self.can_records)
+        log.info("✓ Exported %d filtered/noise package records to %s", len(self.can_records), out_path)
+        return out_path
 
-            if host and host not in HOSTING_BLOCKLIST:
-                if custom_domain is None:
-                    custom_domain = host
-        except Exception:
-            pass
-
-    return ProjectLinks(custom_domain=custom_domain, github_owner=github_owner)

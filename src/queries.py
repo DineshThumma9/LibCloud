@@ -18,6 +18,12 @@ query GetUserRepositories($owner: String!, $cursor: String) {
         isFork
         isPrivate
         url
+        pushedAt
+        defaultBranchRef {
+          target {
+            oid
+          }
+        }
       }
     }
   }
@@ -29,6 +35,11 @@ query GetUserRepositories($owner: String!, $cursor: String) {
 REPO_DEP_QUERY  = """
 query GetRepoDependencies($owner: String!, $repo: String!) {
   repository(owner: $owner, name: $repo) {
+    dockerfile: object(expression: "HEAD:Dockerfile") { id }
+    dockerfile_lower: object(expression: "HEAD:dockerfile") { id }
+    docker_compose: object(expression: "HEAD:docker-compose.yml") { id }
+    docker_compose_yaml: object(expression: "HEAD:docker-compose.yaml") { id }
+    compose_yaml: object(expression: "HEAD:compose.yaml") { id }
     dependencyGraphManifests(first: 20) {
       nodes {
         filename

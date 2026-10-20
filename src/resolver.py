@@ -1,11 +1,14 @@
 import asyncio
 import base64
+import csv
 import logging
+from pathlib import Path
 from typing import Optional, Union, Iterable
 import httpx
 from constants import PACKAGE_REGISTRY, SLUG_MAP, NORM
 from models import PKG_MODELS, PKGInfo
 from collections import Counter 
+from storage import DepsDB
 
 import re
 
@@ -14,7 +17,11 @@ log = logging.getLogger(__name__)
 
 class ImageResolver:
     def __init__(self, timeout: float = 10.0, headers: Optional[dict] = None, github_token: Optional[str] = None):
-        self.cache: dict[str, str] = {}
+        self.cache = DepsDB()
+        self.url_cache: dict[str, str] = {}
+        self.gh_cache: dict[str, str] = {}
+        self.failed_icons: list[dict] = []
+        self._seen_failed: set[str] = set()
         client_headers = headers or {"User-Agent": "logo-ext/1.0"}
         self.client = httpx.AsyncClient(timeout=timeout, headers=client_headers)
         self.github_token = github_token
@@ -77,8 +84,9 @@ class ImageResolver:
 
     async def _fetch_image(self, url: str) -> Optional[str]:
         """Fetch image bytes and return as base64 data URI with SVG sanitization."""
-        if url in self.cache:
-            return self.cache[url]
+        if url in self.url_cache:
+            log.info("⚡ [Cache HIT: Image URL] %s", url)
+            return self.url_cache[url]
         try:
             res = await self.client.get(url, follow_redirects=True)
             if res.status_code == 200 and len(res.content) > 0:
@@ -94,7 +102,7 @@ class ImageResolver:
                         log.debug("Failed sanitizing SVG from %s: %s", url, e)
                 mime = "image/svg+xml" if is_svg else "image/png"
                 data_uri = self._to_data_uri(content, mime)
-                self.cache[url] = data_uri
+                self.url_cache[url] = data_uri
                 return data_uri
             log.debug("HTTP %d for image: %s", res.status_code, url)
         except Exception as e:
@@ -115,8 +123,8 @@ class ImageResolver:
     async def _is_github_org(self, owner: str) -> bool:
         """Checks if a GitHub account is an Organization (ignoring personal User accounts)."""
         cache_key = f"gh_type:{owner.lower()}"
-        if cache_key in self.cache:
-            return self.cache[cache_key] == "Organization"
+        if cache_key in self.gh_cache:
+            return self.gh_cache[cache_key] == "Organization"
         try:
             gh_headers = {"User-Agent": "logo-ext/1.0"}
             if self.github_token:
@@ -124,7 +132,7 @@ class ImageResolver:
             res = await self.client.get(f"https://api.github.com/users/{owner}", headers=gh_headers)
             if res.status_code == 200:
                 account_type = res.json().get("type", "")
-                self.cache[cache_key] = account_type
+                self.gh_cache[cache_key] = account_type
                 return account_type == "Organization"
         except Exception as e:
             log.debug("Failed checking GitHub account type for %s: %s", owner, e)
@@ -140,6 +148,8 @@ class ImageResolver:
         candidate_urls = [
             # Tier 1: Devicon (True multi-color official SVGs)
             f"https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/{compact}/{compact}-original.svg",
+            f"https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/{compact}/{compact}-original-wordmark.svg",
+            f"https://cdn.jsdelivr.net/gh/devicons/devicon@latest/icons/{compact}/{compact}-plain-wordmark.svg",
             
             # Tier 2: SimpleIcons (Official brand hex colors, 3,300+ entries, square icon marks)
             f"https://cdn.simpleicons.org/{compact}",
@@ -160,11 +170,15 @@ class ImageResolver:
                 
         return None
 
-    async def resolve_package(self, pkg_name: str, dep_origin: str) -> Optional[str]:
+    async def resolve_package(self, pkg_name: str, dep_origin: str, norm_name: str) -> Optional[str]:
         """Resolves package to icon via registry (npm/pypi/maven) -> website favicon -> GitHub avatar."""
         if not dep_origin:
             return None
 
+        res = await self.cache.get_icon(norm_name)
+        if res:
+            return res
+    
         reg_template = PACKAGE_REGISTRY.get(dep_origin)
         Model = PKG_MODELS.get(dep_origin)
         if not reg_template or not Model:
@@ -187,6 +201,7 @@ class ImageResolver:
                 if is_org:
                     icon = await self._fetch_image(self.github_avatar_url.format(owner=links.github_owner))
                     if icon:
+                        await self.cache.save_icon(norm_name, icon)
                         log.info("✓ Icon hit for %r via GitHub organization avatar (%s)", pkg_name, links.github_owner)
                         return icon
                 else:
@@ -198,8 +213,10 @@ class ImageResolver:
         return None
 
     async def resolve(
-        self, pkg_dic: Union[dict[str, Union[PKGInfo, int]], Iterable[tuple[str, Union[PKGInfo, int]]]]
-    ) -> Counter:
+        self,
+        pkg_dic: Union[dict[str, Union[PKGInfo, int]], Iterable[tuple[str, Union[PKGInfo, int]]]],
+        export_csv: bool = True,
+    ) -> list[tuple[str, str, int]]:
         """
         Resolves all packages to data URI icons.
         Groups by canonical tool (slug) first so technologies never appear twice,
@@ -249,31 +266,94 @@ class ImageResolver:
                 raw_name = entry["raw_name"]
                 log.info("[%d/%d] %s", i, total, norm_name)
 
-                # 1. Check icon libraries first
+                # Check DB cache first
                 slug = SLUG_MAP.get(norm_name, norm_name)
+                cached = await self.cache.get_icon(slug)
+                if cached:
+                    if entry["val_ref"]:
+                        entry["val_ref"].icon = cached
+                    return (norm_name, cached, count)
+
+                # 1. Check icon libraries first
                 icon = await self.fetch_iconlib(slug)
 
                 # 2. Fall back to package registry lookup
                 if not icon and dep_origin:
-                    icon = await self.resolve_package(raw_name, dep_origin)
+                    icon = await self.resolve_package(raw_name, dep_origin, norm_name)
+                    if not icon and slug and slug != raw_name.lower():
+                        icon = await self.resolve_package(slug, dep_origin, norm_name)
 
                 if icon:
+                    await self.cache.save_icon(slug, icon)
                     if entry["val_ref"]:
                         entry["val_ref"].icon = icon
-                    return (icon, count)
+                    return (norm_name, icon, count)
+
                 log.warning("✗ Missing icon for %r — skipped from cloud", norm_name)
-                await asyncio.sleep(0.2)
+                if norm_name not in self._seen_failed:
+                    self._seen_failed.add(norm_name)
+                    self.failed_icons.append({
+                        "norm_name": norm_name,
+                        "raw_name": raw_name,
+                        "dep_origin": dep_origin,
+                        "count": count,
+                        "slug_tried": slug,
+                        "reason": "no_icon_found",
+                    })
                 return None
 
         results = await asyncio.gather(*(task(i, k, v) for i, (k, v) in enumerate(grouped.items(), 1)))
 
-        icon_dic: Counter = Counter()
+        # Deduplicate by icon URI so identical logos never render multiple times
+        unique_badges: dict[str, dict] = {}
         for item in results:
             if item:
-                icon, count = item
-                icon_dic[icon] += count
+                norm_name, icon, count = item
+                if icon in unique_badges:
+                    unique_badges[icon]["count"] += count
+                else:
+                    unique_badges[icon] = {
+                        "norm_name": norm_name,
+                        "icon": icon,
+                        "count": count,
+                    }
 
-        return icon_dic
+        badge_items = [
+            (entry["norm_name"], entry["icon"], entry["count"])
+            for entry in unique_badges.values()
+        ]
+
+        if export_csv:
+            if self.failed_icons:
+                self.export_failed_icons_csv()
+            self.export_output_csv(badge_items)
+
+        return badge_items
+
+    def export_output_csv(self, badge_items: list[tuple[str, str, int]], filepath: Union[str, Path] = "output.csv") -> Path:
+        out_path = Path(filepath)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["technology", "count"])
+            for norm_name, _, count in sorted(badge_items, key=lambda x: x[2], reverse=True):
+                writer.writerow([norm_name, count])
+        log.info("✓ Exported %d resolved icons to %s", len(badge_items), out_path)
+        return out_path
+
+    def export_failed_icons_csv(self, filepath: Union[str, Path] = "failed_icons.csv") -> Path:
+        out_path = Path(filepath)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=["norm_name", "raw_name", "dep_origin", "count", "slug_tried", "reason"]
+            )
+            writer.writeheader()
+            sorted_failures = sorted(self.failed_icons, key=lambda x: x.get("count", 0), reverse=True)
+            writer.writerows(sorted_failures)
+        log.info("✓ Exported %d failed icon records to %s", len(self.failed_icons), out_path)
+        return out_path 
         
 
     async def aclose(self):

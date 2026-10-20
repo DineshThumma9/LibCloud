@@ -6,12 +6,14 @@ if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
 from models import ProjectLinks, PyPIResponse, NPMResponse, MavenResponse, PKG_MODELS, PKGInfo
-from parser import process, normalize_pkg, parse_urls_to_links, FILE_REGEX
+from parser import DependencyParser, FILE_REGEX
 from client import GraphGithubClient
 from queries import REPOS_QUERY, REPO_DEP_QUERY
 from resolver import ImageResolver
 from utils import transform_wordcloud
-from api import fetch_all_repos_deps, fetch_repo_deps, fetch_all_user_repos
+from api import fetch_all_repos_deps, GraphGithubAPI
+from storage import DepsDB
+from config import settings
 
 __all__ = [
     "ProjectLinks",
@@ -20,9 +22,7 @@ __all__ = [
     "MavenResponse",
     "PKG_MODELS",
     "PKGInfo",
-    "process",
-    "normalize_pkg",
-    "parse_urls_to_links",
+    "DependencyParser",
     "FILE_REGEX",
     "GraphGithubClient",
     "REPOS_QUERY",
@@ -30,6 +30,7 @@ __all__ = [
     "ImageResolver",
     "transform_wordcloud",
     "fetch_all_repos_deps",
-    "fetch_repo_deps",
-    "fetch_all_user_repos",
+    "GraphGithubAPI",
+    "DepsDB",
+    "settings",
 ]
