@@ -11,6 +11,8 @@ from urllib.parse import urlparse
 class ProjectLinks(BaseModel):
     custom_domain: Optional[str] = None
     github_owner: Optional[str] = None
+    github_repo:Optional[str] = None 
+
 
 
 
@@ -18,6 +20,7 @@ class ProjectLinks(BaseModel):
     def parse_urls_to_links(cls, urls: list[str]) -> ProjectLinks:
         custom_domain = None
         github_owner = None
+        github_repo = None 
         for url in urls:
             if not url or not isinstance(url, str):
                 continue
@@ -42,8 +45,13 @@ class ProjectLinks(BaseModel):
                 # Check for github repository
                 if "github.com" in host and not github_owner:
                     path_parts = [p for p in parsed.path.strip("/").split("/") if p]
-                    if len(path_parts) >= 1:
+                    non_repo_routes = {
+                        "sponsors", "orgs", "users", "search", "features", "pricing",
+                        "marketplace", "about", "topics", "pulls", "issues", "settings"
+                    }
+                    if len(path_parts) >= 2 and path_parts[0].lower() not in non_repo_routes:
                         github_owner = path_parts[0].replace(".git", "")
+                        github_repo = path_parts[1].replace(".git", "")
                     continue
 
                 clean_host = host[4:] if host.startswith("www.") else host
@@ -54,7 +62,7 @@ class ProjectLinks(BaseModel):
             except Exception:
                 pass
 
-        return ProjectLinks(custom_domain=custom_domain, github_owner=github_owner)
+        return ProjectLinks(custom_domain=custom_domain, github_owner=github_owner,github_repo=github_repo)
 
 
 
@@ -108,10 +116,40 @@ class MavenResponse(BaseModel):
         return ProjectLinks.parse_urls_to_links(urls)
 
 
+class CratesIOResponse(BaseModel):
+    crate: dict = Field(default_factory=dict)
+
+    def extract_links(self) -> ProjectLinks:
+        urls: list[str] = []
+        if isinstance(self.crate, dict):
+            for k in ("repository", "homepage", "documentation"):
+                val = self.crate.get(k)
+                if val and isinstance(val, str):
+                    urls.append(val)
+        return ProjectLinks.parse_urls_to_links(urls)
+
+
+class RubyGemsResponse(BaseModel):
+    source_code_uri: Optional[str] = None
+    homepage_uri: Optional[str] = None
+    project_uri: Optional[str] = None
+    bug_tracker_uri: Optional[str] = None
+
+    def extract_links(self) -> ProjectLinks:
+        urls: list[str] = []
+        for u in (self.source_code_uri, self.homepage_uri, self.project_uri, self.bug_tracker_uri):
+            if u and isinstance(u, str):
+                urls.append(u)
+        return ProjectLinks.parse_urls_to_links(urls)
+
+
 PKG_MODELS = {
     "ts": NPMResponse,
     "py": PyPIResponse,
     "java": MavenResponse,
+    "kotlin": MavenResponse,
+    "rust": CratesIOResponse,
+    "ruby": RubyGemsResponse,
 }
 
 

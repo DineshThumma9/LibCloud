@@ -56,3 +56,30 @@ query GetRepoDependencies($owner: String!, $repo: String!) {
 }
 """
 
+
+
+IMAGE_QUERY = """
+query GetLibImage($owner: String!, $name: String!) {
+  repository(owner: $owner, name: $name) {
+    homepageUrl
+    usesCustomOpenGraphImage
+    openGraphImageUrl
+
+    logo_root: object(expression: "HEAD:logo.svg") {
+      ... on Blob { text }
+    }
+    logo_assets: object(expression: "HEAD:assets/logo.svg") {
+      ... on Blob { text }
+    }
+    logo_docs: object(expression: "HEAD:docs/logo.svg") {
+      ... on Blob { text }
+    }
+    logo_github: object(expression: "HEAD:.github/logo.svg") {
+      ... on Blob { text }
+    }
+    logo_png: object(expression: "HEAD:logo.png") {
+      id 
+    }
+  }
+}
+"""

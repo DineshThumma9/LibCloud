@@ -11,6 +11,8 @@ from parser import DependencyParser
 from models import PKGInfo
 from pathlib import Path
 from storage import DepsDB 
+from typing import Optional
+from config import settings
 
 
 log = logging.getLogger(__name__)
@@ -24,6 +26,10 @@ class GraphGithubAPI:
         self.ghc = GraphGithubClient(token=token)
         self.dep_db = DepsDB()
         self.parser = DependencyParser()
+
+
+
+
 
     async def fetch_all_user_repos(self) -> list[dict]:
         all_repos = []
@@ -146,7 +152,13 @@ class GraphGithubAPI:
                     stdout=asyncio.subprocess.DEVNULL,
                     stderr=asyncio.subprocess.DEVNULL,
                 )
-                await proc.communicate()
+                try:
+                    await asyncio.wait_for(proc.communicate(), timeout=25.0)
+                except asyncio.TimeoutError:
+                    proc.kill()
+                    await proc.wait()
+                    log.warning("  │  git clone timed out for %s/%s — skipping clone", self.username, repo)
+                    return pkg_dic
                 log.info("  │  clone done, scanning for: %s", TARGETS)
 
                 root = Path(tmp_dir)
@@ -197,7 +209,7 @@ class GraphGithubAPI:
 
         # Complete counter of Lib used in All Repo 
         pkg_dics = defaultdict(PKGInfo)
-        semp = asyncio.Semaphore(7)
+        semp = asyncio.Semaphore(settings.max_concurrent_repo_scans)
 
         async def task(i: int, repo: dict):
             async with semp:
@@ -226,13 +238,19 @@ class GraphGithubAPI:
         log.info("Top 10: %s", [(k, v.count) for k, v in top_10])
         log.info("=" * 60)
 
-        if export_csv and self.parser.can_records:
-            self.parser.export_filtered_csv()
+        if export_csv:
+            if self.parser.can_records:
+                self.parser.export_filtered_csv()
+            if self.parser.unnormalized_records:
+                self.parser.export_unnormalized_csv()
 
         return pkg_dics
 
     def export_filtered_csv(self, filepath: str = "filtered_packages.csv"):
         return self.parser.export_filtered_csv(filepath)
+
+    def export_unnormalized_csv(self, filepath: str = "unnormalized_packages.csv"):
+        return self.parser.export_unnormalized_csv(filepath)
 
 
 async def fetch_all_repos_deps(username: str, token: str = None, export_csv: bool = True):

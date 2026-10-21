@@ -1,60 +1,222 @@
 import csv
+import json
 import logging
 import re
-from collections import defaultdict
+import tomllib
+import xml.etree.ElementTree as ET
+from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Optional, Union
-from urllib.parse import urlparse
+from typing import Callable, Optional, Union
 
 from constants import (
-    HOSTING_BLOCKLIST,
     NOISE,
     NORM,
     clean_pkg,
     pkg_to_lang,
 )
-from models import ProjectLinks, PKGInfo
+from models import PKGInfo
 
 log = logging.getLogger(__name__)
 
-FILE_REGEX = {
-    "requirements.txt": [
-        {   # skip comments (#) and pip options (-e, --index-url, etc.)
-            "block": None,
-            "name": re.compile(r'^(?!\s*#)(?!\s*-)\s*([A-Za-z][A-Za-z0-9._-]*)', re.MULTILINE),
-        },
-    ],
-    "pyproject.toml": [
-        {   # PEP 621: [project] dependencies = ["fastapi>=0.1", ...]
-            "block": re.compile(r'^\s*dependencies\s*=\s*\[([^\]]*)\]', re.MULTILINE),
-            "name": re.compile(r'"([A-Za-z][A-Za-z0-9._-]*)'),
-        },
-        {   # Poetry: [tool.poetry.dependencies] \n name = "^1.0"
-            "block": re.compile(r'\[tool\.poetry\.dependencies\]([^\[]*)'),
-            "name": re.compile(r'^([A-Za-z][A-Za-z0-9._-]*)\s*=', re.MULTILINE),
-        },
-    ],
-    "pom.xml": [
-        {   # captures (groupId, artifactId) pairs — joined below into
-            # "groupId:artifactId" so it matches the GitHub API's own
-            # Maven packageName format and reuses the same clean_pkg lambda
-            "block": None,
-            "name": re.compile(
-                r'<dependency>\s*<groupId>([^<]+)</groupId>\s*<artifactId>([^<]+)</artifactId>',
-                re.DOTALL,
-            ),
-        },
-    ],
-    "package.json": [
-        {   # isolate the dependencies/devDependencies object first so
-            # "name", "scripts", etc. elsewhere in the file can't match
-            "block": re.compile(r'"(?:dependencies|devDependencies)"\s*:\s*\{([^}]*)\}'),
-            "name": re.compile(r'"((?:@[\w.-]+/)?[\w.-]+)"\s*:\s*"'),
-        },
-    ],
+
+def parse_pyproject(content: str) -> list[str]:
+    raws: list[str] = []
+    try:
+        data = tomllib.loads(content)
+        # PEP 621 dependencies
+        for dep in data.get("project", {}).get("dependencies", []):
+            if isinstance(dep, str):
+                m = re.match(r"^([A-Za-z0-9_.-]+)", dep.strip())
+                if m:
+                    raws.append(m.group(1))
+
+        # PEP 621 optional-dependencies
+        for opt_list in data.get("project", {}).get("optional-dependencies", {}).values():
+            if isinstance(opt_list, list):
+                for dep in opt_list:
+                    if isinstance(dep, str):
+                        m = re.match(r"^([A-Za-z0-9_.-]+)", dep.strip())
+                        if m:
+                            raws.append(m.group(1))
+
+        # PEP 735 dependency-groups (uv, flit)
+        for grp in data.get("dependency-groups", {}).values():
+            if isinstance(grp, list):
+                for item in grp:
+                    if isinstance(item, str):
+                        m = re.match(r"^([A-Za-z0-9_.-]+)", item.strip())
+                        if m:
+                            raws.append(m.group(1))
+
+        # Poetry tool section
+        poetry = data.get("tool", {}).get("poetry", {})
+        if isinstance(poetry, dict):
+            for k in poetry.get("dependencies", {}).keys():
+                if k.lower() != "python":
+                    raws.append(k)
+            for grp in poetry.get("group", {}).values():
+                if isinstance(grp, dict):
+                    for k in grp.get("dependencies", {}).keys():
+                        if k.lower() != "python":
+                            raws.append(k)
+            for k in poetry.get("dev-dependencies", {}).keys():
+                if k.lower() != "python":
+                    raws.append(k)
+    except Exception as e:
+        log.debug("Falling back to regex for toml: %s", e)
+        for m in re.finditer(r'["\']([A-Za-z0-9_.-]+)(?:\[[^\]]*\])?(?:\s*[><=~^!].*?)?["\']', content):
+            raws.append(m.group(1))
+    return raws
+
+
+def parse_package_json(content: str) -> list[str]:
+    raws: list[str] = []
+    try:
+        data = json.loads(content)
+        if isinstance(data, dict):
+            for sec in ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies"):
+                d = data.get(sec, {})
+                if isinstance(d, dict):
+                    raws.extend(d.keys())
+    except Exception as e:
+        log.debug("Falling back to regex for json: %s", e)
+        for m in re.finditer(r'"((?:@[\w.-]+/)?[\w.-]+)"\s*:\s*"', content):
+            raws.append(m.group(1))
+    return raws
+
+
+def parse_requirements(content: str) -> list[str]:
+    raws: list[str] = []
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith(("#", "--", "-r", "-f", "-i")):
+            continue
+        if "#egg=" in line:
+            raws.append(line.split("#egg=", 1)[1].strip())
+            continue
+        if line.startswith("-e "):
+            line = line[3:].strip()
+        line = line.split(" #", 1)[0].split(";", 1)[0].strip()
+        m = re.match(r"^([A-Za-z0-9_.-]+)", line)
+        if m:
+            raws.append(m.group(1))
+    return raws
+
+
+def parse_pom_xml(content: str) -> list[str]:
+    raws: list[str] = []
+    try:
+        root = ET.fromstring(content)
+        for dep in root.iter():
+            if dep.tag.endswith("dependency"):
+                gid, aid = None, None
+                for child in dep:
+                    if child.tag.endswith("groupId") and child.text:
+                        gid = child.text.strip()
+                    elif child.tag.endswith("artifactId") and child.text:
+                        aid = child.text.strip()
+                if gid and aid:
+                    raws.append(f"{gid}:{aid}")
+    except Exception as e:
+        log.debug("Falling back to regex for pom: %s", e)
+        for m in re.finditer(r'<dependency>\s*<groupId>([^<]+)</groupId>\s*<artifactId>([^<]+)</artifactId>', content, re.DOTALL):
+            raws.append(f"{m.group(1).strip()}:{m.group(2).strip()}")
+    return raws
+
+
+def parse_workflow(content: str) -> list[str]:
+    return [
+        m.group(1)
+        for m in re.finditer(r'uses:\s*["\']?([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:@[^\s"\']+)?)', content)
+    ]
+
+
+def parse_cargo_toml(content: str) -> list[str]:
+    raws: list[str] = []
+    try:
+        data = tomllib.loads(content)
+        sections = ("dependencies", "dev-dependencies", "build-dependencies")
+        for sec in sections:
+            d = data.get(sec, {})
+            if isinstance(d, dict):
+                raws.extend(d.keys())
+        ws_deps = data.get("workspace", {}).get("dependencies", {})
+        if isinstance(ws_deps, dict):
+            raws.extend(ws_deps.keys())
+        for target_cfg in data.get("target", {}).values():
+            if isinstance(target_cfg, dict):
+                for sec in sections:
+                    d = target_cfg.get(sec, {})
+                    if isinstance(d, dict):
+                        raws.extend(d.keys())
+    except Exception as e:
+        log.debug("Falling back to regex for Cargo.toml: %s", e)
+        for m in re.finditer(r'^\s*([A-Za-z0-9_-]+)\s*=', content, re.MULTILINE):
+            raws.append(m.group(1))
+    return raws
+
+
+def parse_go_mod(content: str) -> list[str]:
+    raws: list[str] = []
+    in_block = False
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith("//"):
+            continue
+        if line.startswith("require ("):
+            in_block = True
+            continue
+        if in_block:
+            if line.startswith(")"):
+                in_block = False
+                continue
+            parts = line.split()
+            if parts:
+                raws.append(parts[0])
+        elif line.startswith("require "):
+            parts = line[len("require "):].strip().split()
+            if parts:
+                raws.append(parts[0])
+    return raws
+
+
+def parse_gemfile(content: str) -> list[str]:
+    return [
+        m.group(1)
+        for m in re.finditer(r'^\s*gem\s+["\']([A-Za-z0-9_-]+)["\']', content, re.MULTILINE)
+    ]
+
+
+def parse_gradle(content: str) -> list[str]:
+    raws: list[str] = []
+    for m in re.finditer(r'(?:implementation|api|testImplementation|compileOnly|runtimeOnly|annotationProcessor)\s*\(?["\']([^:"\'\s]+):([^:"\'\s]+)(?::[^"\']*)?["\']\)?', content):
+        raws.append(f"{m.group(1)}:{m.group(2)}")
+    for m in re.finditer(r'group:\s*["\']([^"\']+)["\'],\s*name:\s*["\']([^"\']+)["\']', content):
+        raws.append(f"{m.group(1)}:{m.group(2)}")
+    return raws
+
+
+FILE_PARSERS: dict[str, Callable[[str], list[str]]] = {
+    "pyproject.toml": parse_pyproject,
+    "package.json": parse_package_json,
+    "requirements.txt": parse_requirements,
+    "Pipfile": parse_requirements,
+    "pom.xml": parse_pom_xml,
+    "build.gradle": parse_gradle,
+    "build.gradle.kts": parse_gradle,
+    "go.mod": parse_go_mod,
+    "Cargo.toml": parse_cargo_toml,
+    "Gemfile": parse_gemfile,
+    "workflow": parse_workflow,
 }
 
-
+ACTION_PREFIX_NORM: dict[str, str] = {
+    "actions/": "GitHub Actions",
+    "docker/": "Docker",
+    "azure/": "Azure",
+    "aws-actions/": "AWS SDK",
+    "google-github-actions/": "Google Cloud",
+}
 
 
 class DependencyParser:
@@ -63,22 +225,28 @@ class DependencyParser:
         self.can: set[str] = set()
         self.can_records: list[dict] = []
         self._seen_filtered: set[tuple[str, str, str]] = set()
+        self.unnormalized_records: list[dict] = []
+        self._seen_unnormalized: set[tuple[str, str, str]] = set()
+        self._unnorm_counts: Counter = Counter()
 
     def parser(self, pkg_content: str, pkg_origin: str) -> defaultdict[str, PKGInfo]:
         pkg_dic = defaultdict(PKGInfo)
-        for cfg in FILE_REGEX.get(pkg_origin, []):
-            text = pkg_content
-            if cfg["block"] is not None:
-                text = "\n".join(cfg["block"].findall(pkg_content))
-            for raw in cfg["name"].findall(text):
-                if isinstance(raw, tuple):      # pom.xml's (groupId, artifactId)
-                    raw = ":".join(raw)
-                norm, lang = self.normalize_pkg(raw, pkg_origin)
-                if norm and lang:
-                    pkg = pkg_dic[norm]
-                    pkg.count += 1
-                    pkg.dep_origin = lang
-                    pkg.raw_names.add(raw)
+        fname = Path(pkg_origin).name
+
+        parse_fn = FILE_PARSERS.get(fname)
+        if not parse_fn and ("workflow" in fname.lower() or fname.endswith((".yml", ".yaml"))):
+            parse_fn = FILE_PARSERS.get("workflow")
+
+        if not parse_fn:
+            return pkg_dic
+
+        for raw in parse_fn(pkg_content):
+            norm, lang = self.normalize_pkg(raw, pkg_origin)
+            if norm and lang:
+                pkg = pkg_dic[norm]
+                pkg.count += 1
+                pkg.dep_origin = lang
+                pkg.raw_names.add(raw)
         return pkg_dic
 
     parse = parser
@@ -87,6 +255,9 @@ class DependencyParser:
     def normalize_pkg(self, dep_name: str, dep_origin: str) -> tuple[Optional[str], Optional[str]]:
         fname = Path(dep_origin).name
         lang = pkg_to_lang.get(fname)
+        if not lang and ("workflow" in str(dep_origin).lower() or fname.endswith((".yml", ".yaml"))):
+            lang = "actions"
+
         if not lang:
             record_key = (dep_name, dep_name, dep_origin)
             if record_key not in self._seen_filtered:
@@ -102,8 +273,9 @@ class DependencyParser:
                 })
             return None, None
 
-        func = clean_pkg.get(lang)
-        cln_pkg = func(dep_name) if func else dep_name
+        clean_fn = clean_pkg.get(lang)
+        cln_pkg = clean_fn(dep_name) if clean_fn else dep_name
+
         if cln_pkg in NOISE.get(lang, set()):
             self.can.add(cln_pkg)
             record_key = (dep_name, cln_pkg, dep_origin)
@@ -119,7 +291,28 @@ class DependencyParser:
                     "reason": "noise_blocklist",
                 })
             return None, None
-        norm_name = NORM.get(lang, {}).get(cln_pkg, cln_pkg)
+
+        if lang == "actions":
+            for prefix, canonical in ACTION_PREFIX_NORM.items():
+                if cln_pkg.startswith(prefix):
+                    return canonical, lang
+
+        norm_name = NORM.get(lang, {}).get(cln_pkg, None)
+        if not norm_name:
+            record_key = (dep_name, cln_pkg, dep_origin)
+            self._unnorm_counts[(dep_name, cln_pkg, lang, fname, dep_origin)] += 1
+            if record_key not in self._seen_unnormalized:
+                self._seen_unnormalized.add(record_key)
+                self.unnormalized_records.append({
+                    "raw_name": dep_name,
+                    "cleaned_name": cln_pkg,
+                    "dep_origin": fname,
+                    "origin_path": dep_origin,
+                    "language": lang,
+                    "reason": "missing_normalization",
+                })
+            return cln_pkg, lang
+
         return norm_name, lang
 
     def export_filtered_csv(self, filepath: Union[str, Path] = "filtered_packages.csv") -> Path:
@@ -135,3 +328,25 @@ class DependencyParser:
         log.info("✓ Exported %d filtered/noise package records to %s", len(self.can_records), out_path)
         return out_path
 
+    def export_unnormalized_csv(self, filepath: Union[str, Path] = "unnormalized_packages.csv") -> Path:
+        out_path = Path(filepath)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        rows = []
+        for (raw_name, cln_pkg, lang, fname, dep_origin), count in self._unnorm_counts.most_common():
+            rows.append({
+                "cleaned_name": cln_pkg,
+                "raw_name": raw_name,
+                "count": count,
+                "language": lang,
+                "dep_origin": fname,
+                "origin_path": dep_origin,
+            })
+        with out_path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(
+                f,
+                fieldnames=["cleaned_name", "raw_name", "count", "language", "dep_origin", "origin_path"]
+            )
+            writer.writeheader()
+            writer.writerows(rows)
+        log.info("✓ Exported %d unnormalized package records to %s", len(rows), out_path)
+        return out_path

@@ -11,3 +11,6 @@ src/__pycache__
 failed_icons.csv
 filtered_packages.csv
 output.csv 
+*.csv 
+issue.md
+plan.md

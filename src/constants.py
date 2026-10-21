@@ -23,7 +23,7 @@ SLUG_MAP = {
     "Gson": "google",
     "OkHttp": "okta",
     "Apache HttpClient": "apache",
-    "MapStruct": "spring",
+    "MapStruct": "mapstruct",
     "Apache Kafka": "apachekafka",
     "gRPC": "grpc",
     "Docker": "docker",
@@ -68,12 +68,15 @@ SLUG_MAP = {
     "Pydantic": "pydantic",
     "Celery": "celery",
     "RQ": "python",
-    "Taskiq": "python",
+    "Taskiq": "taskiq",
+    "Sentry": "sentry",
+    "PostHog": "posthog",
     "HTTPX": "httpx",
     "Requests": "pypi",
     "Aiohttp": "aiohttp",
     "AWS SDK": "amazonwebservices",
     "Stripe": "stripe",
+    "Firebase": "firebase",
     "Google": "google",
     "Google Cloud": "googlecloud",
     "Google Gemini": "googlegemini",
@@ -140,26 +143,81 @@ SLUG_MAP = {
     "Astro": "astro",
     "astro": "astro",
     "astrojs": "astro",
+    # CI/CD & Cloud
+    "GitHub Actions": "githubactions",
+    "Azure": "azure",
+    "Microsoft Azure": "azure",
+    # Java Testing & Dev
+    "JUnit": "junit5",
+    "REST-Assured": "rest-assured",
+    "Lombok": "lombok",
+    # Search & LLMs
+    "DuckDuckGo": "duckduckgo",
+    "Gemini": "googlegemini",
+    "Google Gemini": "googlegemini",
+    "Vercel AI SDK": "vercel",
+    "ai": "vercel",
+    # Testing & QA
+    "Playwright": "playwright",
+    "Pytest": "pytest",
+    "Jest": "jest",
+    "Vitest": "vitest",
+    "Cypress": "cypress",
+    # Linters & Formatters
+    "Ruff": "ruff",
+    "ESLint": "eslint",
+    "Prettier": "prettier",
+    "Black": "python",
+    "Flake8": "python",
+    "Mypy": "python",
+    "Pylint": "python",
+    "isort": "python",
+    # Go
+    "Gin": "gin",
+    "Fiber": "gofiber",
+    "GORM": "gorm",
+    "Go": "go",
+    # Rust
+    "Tokio": "tokio",
+    "Actix": "actix",
+    "Tauri": "tauri",
+    "Yew": "yew",
+    "Rust": "rust",
+    # Ruby
+    "Ruby on Rails": "rubyonrails",
+    "Sinatra": "sinatra",
+    "Sidekiq": "sidekiq",
+    "RSpec": "rspec",
+    "Ruby": "ruby",
+    "RuboCop": "rubocop",
+    # Kotlin
+    "Ktor": "ktor",
+    "Kotlin": "kotlin",
+    "OkHttp": "square",
+    "Retrofit": "square",
 }
 
 
 clean_pkg = {
     "ts": lambda x: x.split("/")[0].strip("@"),
     "java": lambda x: x.split(":")[-1],
+    "kotlin": lambda x: x.split(":")[-1],
+    "actions": lambda x: x.split("@")[0].strip(),
+    "py": lambda x: re.sub(r'\[.*\]', '', x).strip(),
+    "go": lambda x: x.split("/")[-1],
+    "rust": lambda x: x.strip(),
+    "ruby": lambda x: x.strip(),
 }
 
 
 
 
 NOISE_PYTHON = {
-    # Testing & mocking
-    "pytest", "pytest-cov", "pytest-asyncio", "pytest-mock", "pytest-xdist",
-    "pytest-env", "pytest-timeout", "pytest-benchmark", "pytest-randomly",
-    "unittest", "mock", "coverage", "hypothesis", "tox", "nox", "factory-boy",
+    # Testing & mocking utilities
+    "hypothesis", "tox", "nox", "factory-boy",
     "faker", "freezegun", "respx", "responses", "httpretty", "vcrpy",
-    # Linting, formatting & type checking
-    "black", "flake8", "ruff", "isort", "mypy", "pylint", "autopep8",
-    "pyright", "pre-commit", "bandit", "safety", "semgrep",
+    # Security checkers
+    "bandit", "safety", "semgrep",
     # types-* stubs (catches all types-X packages)
     "types-requests", "types-setuptools", "types-redis", "types-pyyaml",
     "types-pillow", "types-boto", "types-stripe", "types-python-dateutil",
@@ -172,8 +230,9 @@ NOISE_PYTHON = {
     "packaging", "platformdirs", "filelock", "multidict", "yarl",
     "frozenlist", "aiosignal", "attrs", "exceptiongroup",
     # Misc runtime noise
+    ".idea",  # IDE artifact
     "click",  # CLI helper, rarely the "point" of a project
-    "rich", "colorama",  # terminal styling
+ "colorama",  # terminal styling
     "python-dotenv", "environs",  # env var loaders
     "tqdm",  # progress bars
     "h11", "httplib2", "oauthlib", "proto-plus", 
@@ -190,7 +249,7 @@ NOISE_PYTHON = {
     "soupsieve", "dataclasses-json", "dataclasses_json", "durationpy",
     # Google transport & auth plumbing
     "google-auth", "google-auth-httplib2", "google-auth-oauthlib",
-    "google-api-core", "googleapis-common-protos", "google-ai-generativelanguage",
+    "google-api-core", "googleapis-common-protos",
 }
 
 NOISE_GO = {
@@ -215,18 +274,8 @@ NOISE_TS = {
     "@types/express", "@types/cors", "@types/lodash", "@types/supertest",
     "@types/uuid", "@types/bcrypt", "@types/multer", "@types/passport",
     "@types/cookie-parser", "@types/morgan", "@types/compression",
-    # Testing
-    "jest", "ts-jest", "vitest", "supertest",
-    "testing-library",          # @testing-library/* → "testing-library" after clean
-    "@testing-library/react", "@testing-library/jest-dom", "@testing-library/user-event",
     # Compilers & type checkers
     "typescript", "ts-node", "tsx", "tsc-alias",
-    # Linters & formatters
-    "eslint", "prettier",
-    "typescript-eslint",        # @typescript-eslint/* → "typescript-eslint" after clean
-    "@typescript-eslint/parser", "@typescript-eslint/eslint-plugin",
-    "eslint-config-prettier", "eslint-config-next", "eslint-config-airbnb",
-    "eslint-plugin-react", "eslint-plugin-react-hooks", "eslint-plugin-import",
     # Build tools & bundlers
     "esbuild", "rollup", "webpack", "webpack-cli", "webpack-dev-server",
     "swc",                      # @swc/* → "swc" after clean
@@ -235,13 +284,14 @@ NOISE_TS = {
     # CSS tooling & micro-utilities
     "postcss", "autoprefixer",
     "clsx", "class-variance-authority", "tailwind-merge", "globals",
-    "eslint-plugin-react-refresh", "tw-animate-css",
-    "fontsource-variable", "oxlint", "next-themes", "emotion",
+    "tw-animate-css", "fontsource-variable", "oxlint", "next-themes", "emotion",
     # Dev utilities
     "nodemon", "ts-node-dev", "concurrently", "rimraf", "cross-env",
     "dotenv", "dotenv-cli", "env-cmd",
-    "npm-check-updates", "patch-package", "madge", "vite-plugin-eslint", "use-stick-to-bottom", "tokenlens",
-    "eventsource-parser", "lru-cache", "nanoid",
+    "npm-check-updates", "patch-package", "madge", "use-stick-to-bottom", "tokenlens",
+    "eventsource-parser", "lru-cache", "nanoid", "ms",
+    # Excluded library with duplicate branding
+    "streamdown",
     # Runtime shims / low-level
     "tslib", "core-js", "object-assign",
     # Storybook
@@ -249,12 +299,9 @@ NOISE_TS = {
 }
 
 NOISE_JS = {
-    # Testing
-    "jest", "mocha", "chai", "sinon", "vitest", "cypress",
-    "playwright", "puppeteer", "jasmine",
-    # Linters, formatters & babel
-    "eslint", "prettier", "eslint-config-prettier", "eslint-plugin-react",
-    "eslint-plugin-react-hooks", "eslint-plugin-import",
+    # Testing shims
+    "puppeteer", "jasmine",
+    # Babel
     "babel-loader", "@babel/core", "@babel/preset-env", "@babel/preset-react",
     "babel",                    # @babel/* → "babel" after clean
     # Build & bundlers
@@ -348,7 +395,18 @@ NORM_JAVA = {
     "httpclient5": "Apache HttpClient",
     # Mapping & Protobuf
     "mapstruct": "MapStruct",
+    "mapstruct-processor": "MapStruct",
+    "lombok": "Lombok",
+    "lombok-mapstruct-binding": "Lombok",
     "protobuf-java": "Google",
+    # Testing
+    "junit": "JUnit",
+    "junit-jupiter": "JUnit",
+    "junit-jupiter-api": "JUnit",
+    "junit-jupiter-engine": "JUnit",
+    "junit-vintage-engine": "JUnit",
+    "junit-platform-launcher": "JUnit",
+    "rest-assured": "REST-Assured",
 }
 
 NORM_PY = {
@@ -363,6 +421,8 @@ NORM_PY = {
     "flask-mail": "Flask",
     "flask-bcrypt": "Flask",
     "flask-sqlalchemy": "Flask",
+    "fastapi-mail":"FastAPI",
+
     "wtforms": "Flask",
     "django": "Django",
     "starlette": "Starlette",
@@ -427,25 +487,25 @@ NORM_PY = {
     "langchain": "LangChain",
     "langchain-core": "LangChain",
     "langchain-community": "LangChain",
-    "langchain-openai": "LangChain",
-    "langchain-anthropic": "LangChain",
-    "langchain-groq": "LangChain",
-    "langchain-mistralai": "LangChain",
-    "langchain-google-genai": "LangChain",
-    "langchain-chroma": "LangChain",
-    "langchain-pinecone": "LangChain",
+    "langchain-openai": "OpenAI",
+    "langchain-anthropic": "Anthropic",
+    "langchain-groq": "Groq",
+    "langchain-mistralai": "mistral",
+    "langchain-google-genai": "Gemini",
+    "langchain-chroma": "chroma",
+    "langchain-pinecone": "pinecone",
     "langsmith": "LangChain",
-    "langchain-huggingface": "LangChain",
-    "langchain-gemini": "LangChain",
+    "langchain-huggingface": "huggingface",
+    "langchain-gemini": "Gemini",
     "langchain-text-splitters": "LangChain",
     "langgraph": "LangGraph",
-    "langgraph-checkpoint-sqlite": "LangGraph",
+    "langgraph-checkpoint-sqlite": "sqlite",
     "langgraph-sdk": "LangGraph",
     "langgraph-prebuilt": "LangGraph",
     "langgraph-checkpoint": "LangGraph",
     "llama-index": "LlamaIndex",
     "llama-index-core": "LlamaIndex",
-    "llama-index-llms-openai": "LlamaIndex",
+    "llama-index-llms-openai": "openai",
     "llama-cloud": "LlamaIndex",
     "llama-index-cli": "LlamaIndex",
     "llama-cloud-services": "LlamaIndex",
@@ -457,10 +517,10 @@ NORM_PY = {
     "peft": "Hugging Face",
     "trl": "Hugging Face",
     # Google AI & Cloud / APIs
-    "google-generativeai": "Google Gemini",
-    "google-genai": "Google Gemini",
-    "vertexai": "Google Gemini",
-    "google-cloud-aiplatform": "Google Gemini",
+    "google-generativeai": "Gemini",
+    "google-genai": "Gemini",
+    "vertexai": "Gemini",
+    "google-cloud-aiplatform": "Gemini",
     "google-api-python-client": "Google",
     "google-cloud-storage": "Google Cloud",
     "google-cloud-core": "Google Cloud",
@@ -469,6 +529,7 @@ NORM_PY = {
     "boto3": "AWS SDK",
     "botocore": "AWS SDK",
     "aioboto3": "AWS SDK",
+    "langchain-neo4j":"neo4j",
     "aiobotocore": "AWS SDK",
     # Payments & comms
     "stripe": "Stripe",
@@ -484,19 +545,48 @@ NORM_PY = {
     "grpcio": "gRPC",
     "grpcio-status": "gRPC",
     "celery": "Celery",
+    "celery-types": "Celery",
     "rq": "RQ",
     "taskiq": "Taskiq",
+    "taskiq-redis": "Taskiq",
+    "taskiq-fastapi": "Taskiq",
+    "taskiq-aio-pika": "Taskiq",
+    "sentry-sdk": "Sentry",
+    "sentry": "Sentry",
+    "posthog": "PostHog",
+    "falkordb": "FalkorDB",
+    "langchain-falkordb": "FalkorDB",
+    "litellm": "LiteLLM",
     # HTTP clients
     "httpx": "HTTPX",
     "requests": "Requests",
     "aiohttp": "Aiohttp",
     "httpcore": "HTTPX",        # httpcore is httpx's transport layer
+    "google-ai-generativelanguage": "Gemini",
+    "ddgs": "DuckDuckGo",
+    "duckduckgo-search": "DuckDuckGo",
+    # Testing & QA
+    "pytest": "Pytest",
+    "pytest-cov": "Pytest",
+    "pytest-asyncio": "Pytest",
+    "pytest-mock": "Pytest",
+    "pytest-xdist": "Pytest",
+    "pytest-env": "Pytest",
+    "pytest-timeout": "Pytest",
+    "pytest-benchmark": "Pytest",
+    "pytest-randomly": "Pytest",
+    "playwright": "Playwright",
+    # Linters & Formatters
+    "ruff": "Ruff",
+    "black": "Black",
+    "flake8": "Flake8",
+    "mypy": "Mypy",
+    "pylint": "Pylint",
+    "isort": "isort",
 }
 
 NOISE_JAVA = {
-    # Testing
-    "junit", "junit-jupiter", "junit-jupiter-api", "junit-jupiter-engine",
-    "junit-vintage-engine", "junit-platform-launcher",
+    # Testing & mocking
     "testng", "mockito-core", "mockito-junit-jupiter", "mockito-inline",
     "assertj-core", "hamcrest", "hamcrest-core", "archunit",
     # Spring dev / test
@@ -505,15 +595,13 @@ NOISE_JAVA = {
     # Build plugins
     "maven-compiler-plugin", "maven-surefire-plugin", "maven-jar-plugin",
     "maven-failsafe-plugin", "maven-resources-plugin", "maven-shade-plugin",
-    # Code generation (not a "used library" in the final product)
-    "lombok", "lombok-mapstruct-binding", "mapstruct-processor",
     # Logging (infrastructure, not a feature)
     "slf4j-api", "logback-classic", "logback-core",
     "log4j-api", "log4j-core", "log4j-slf4j-impl",
     # Bytecode manipulation
     "byte-buddy", "byte-buddy-agent", "cglib", "asm",
     # Test & runtime utilities
-    "annotations-api", "javafaker", "reactor-test", "rest-assured",
+    "annotations-api", "javafaker", "reactor-test",
 }
 
 
@@ -562,8 +650,10 @@ NORM_TS = {
     "hono": "Hono",
     "elysia": "Hono",           # Bun-native, same class
     # --- UI Libraries & Styling ---
+    "tailwind": "Tailwind CSS",
     "tailwindcss": "Tailwind CSS",
     "tailwindcss-animate": "Tailwind CSS",
+    "ai": "Vercel AI SDK",
     "bootstrap": "Bootstrap",
     "chakra-ui": "Chakra UI",   # @chakra-ui/* → "chakra-ui" after clean
     "mui": "Material UI",       # @mui/* → "mui" after clean
@@ -634,6 +724,11 @@ NORM_TS = {
     "lodash-es": "Lodash",
     "date-fns": "React",        # date utility almost always with React
     "dayjs": "React",
+    # --- Monitoring & Analytics ---
+    "sentry": "Sentry",
+    "@sentry": "Sentry",
+    "posthog": "PostHog",
+    "@posthog": "PostHog",
     # --- Markdown & Content ---
     "remark": "Remark",
     "remark-parse": "Remark",
@@ -651,6 +746,19 @@ NORM_TS = {
     "rehype-raw": "Remark",
     "react-markdown": "Remark",
     "unified": "Remark",
+    # --- Testing & QA ---
+    "playwright": "Playwright",
+    "jest": "Jest",
+    "ts-jest": "Jest",
+    "vitest": "Vitest",
+    "cypress": "Cypress",
+    # --- Linters & Formatters ---
+    "eslint": "ESLint",
+    "eslint-plugin-react-hooks": "ESLint",
+    "eslint-plugin-react-refresh": "ESLint",
+    "vite-plugin-eslint": "ESLint",
+    "typescript-eslint": "ESLint",
+    "prettier": "Prettier",
 }
 pkg_to_lang = {
     # Python manifests & lock files
@@ -671,11 +779,216 @@ pkg_to_lang = {
     # Java / Maven
     "pom.xml": "java",
     "build.gradle": "java",
-    "build.gradle.kts": "java",
+    # Kotlin
+    "build.gradle.kts": "kotlin",
+    # Go
+    "go.mod": "go",
+    "go.sum": "go",
+    # Rust
+    "Cargo.toml": "rust",
+    "Cargo.lock": "rust",
+    # Ruby
+    "Gemfile": "ruby",
+    "Gemfile.lock": "ruby",
 }
 
-NOISE = {"java": NOISE_JAVA, "py": NOISE_PYTHON, "ts": NOISE_TS}
-NORM = {"java": NORM_JAVA, "py": NORM_PY, "ts": NORM_TS}
+# --- Go Normalization ---
+NORM_GO = {
+    "gin": "Gin",
+    "gin-gonic": "Gin",
+    "fiber": "Fiber",
+    "echo": "Echo",
+    "chi": "Chi",
+    "gorilla": "Gorilla",
+    "mux": "Gorilla",
+    "zap": "Zap",
+    "logrus": "Logrus",
+    "zerolog": "Zerolog",
+    "gorm": "GORM",
+    "sqlx": "SQLx",
+    "pq": "PostgreSQL",
+    "pgx": "PostgreSQL",
+    "go-sql-driver": "MySQL",
+    "testify": "Testify",
+    "cobra": "Cobra",
+    "viper": "Viper",
+    "grpc": "gRPC",
+    "protobuf": "Protocol Buffers",
+    "redis": "Redis",
+    "go-redis": "Redis",
+    "mongo-go-driver": "MongoDB",
+    "kafka-go": "Kafka",
+    "sarama": "Kafka",
+}
+
+NOISE_GO = {
+    "xerrors", "sync", "crypto", "net", "sys", "text", "tools",
+}
+
+# --- Rust Normalization ---
+NORM_RUST = {
+    "tokio": "Tokio",
+    "async-std": "Async-std",
+    "actix": "Actix",
+    "actix-web": "Actix",
+    "axum": "Axum",
+    "rocket": "Rocket",
+    "warp": "Warp",
+    "serde": "Serde",
+    "serde_json": "Serde",
+    "diesel": "Diesel",
+    "sqlx": "SQLx",
+    "sea-orm": "SeaORM",
+    "rusqlite": "SQLite",
+    "postgres": "PostgreSQL",
+    "redis": "Redis",
+    "tauri": "Tauri",
+    "yew": "Yew",
+    "clap": "Clap",
+    "tracing": "Tracing",
+    "log": "Log",
+    "env_logger": "Env Logger",
+    "reqwest": "Reqwest",
+    "hyper": "Hyper",
+    "anyhow": "Anyhow",
+    "thiserror": "Thiserror",
+    "rand": "Rand",
+    "regex": "Regex",
+    "rayon": "Rayon",
+    "crossbeam": "Crossbeam",
+    "tonic": "gRPC",
+    "prost": "Protocol Buffers",
+    "criterion": "Criterion",
+}
+
+NOISE_RUST = {
+    "cfg-if", "bitflags", "lazy_static", "once_cell",
+}
+
+# --- Ruby Normalization ---
+NORM_RUBY = {
+    "rails": "Ruby on Rails",
+    "railties": "Ruby on Rails",
+    "activerecord": "Ruby on Rails",
+    "actionpack": "Ruby on Rails",
+    "sinatra": "Sinatra",
+    "hanami": "Hanami",
+    "sidekiq": "Sidekiq",
+    "resque": "Resque",
+    "delayed_job": "Delayed Job",
+    "rspec": "RSpec",
+    "rspec-rails": "RSpec",
+    "minitest": "Minitest",
+    "capybara": "Capybara",
+    "cucumber": "Cucumber",
+    "puma": "Puma",
+    "unicorn": "Unicorn",
+    "passenger": "Passenger",
+    "devise": "Devise",
+    "cancancan": "CanCanCan",
+    "pundit": "Pundit",
+    "pg": "PostgreSQL",
+    "mysql2": "MySQL",
+    "sqlite3": "SQLite",
+    "redis": "Redis",
+    "faraday": "Faraday",
+    "httparty": "HTTParty",
+    "rubocop": "RuboCop",
+}
+
+NOISE_RUBY = {
+    "bundler", "rake", "bootsnap", "zeitwerk",
+}
+
+# --- Kotlin Normalization ---
+NORM_KOTLIN = {
+    "ktor": "Ktor",
+    "ktor-server-core": "Ktor",
+    "ktor-server-netty": "Ktor",
+    "ktor-client-core": "Ktor",
+    "ktor-client-cio": "Ktor",
+    "kotlinx-coroutines-core": "Kotlin",
+    "kotlinx-coroutines-android": "Kotlin",
+    "kotlinx-coroutines-reactive": "Kotlin",
+    "kotlinx-coroutines-reactor": "Kotlin",
+    "kotlinx-coroutines-test": "Kotlin",
+    "kotlinx-serialization-json": "Kotlin",
+    "firebase-auth-ktx": "Firebase",
+    "firebase-messaging-ktx": "Firebase",
+    "firebase-firestore-ktx": "Firebase",
+    "firebase-analytics-ktx": "Firebase",
+    "firebase-common-ktx": "Firebase",
+    "exposed-core": "Exposed",
+    "exposed-dao": "Exposed",
+    "exposed-jdbc": "Exposed",
+    "spring-boot-starter-web": "Spring Boot",
+    "spring-boot-starter-data-jpa": "Spring Boot",
+    "retrofit": "Retrofit",
+    "okhttp": "OkHttp",
+    "moshi": "Moshi",
+    "arrow-core": "Arrow",
+    "mockk": "MockK",
+    "kotest": "Kotest",
+}
+
+NOISE_KOTLIN = {
+    "kotlin-stdlib", "kotlin-stdlib-jdk8", "kotlin-stdlib-jdk7", "kotlin-stdlib-common",
+    "kotlin-reflect", "kotlin-test", "kotlin-test-junit", "kotlin-test-junit5",
+    "spring-security-test", "spring-boot-starter-test", "reactor-test",
+}
+
+NORM_ACTIONS = {
+    # GitHub Actions
+    "actions/checkout": "GitHub Actions",
+    "actions/setup-node": "GitHub Actions",
+    "actions/setup-python": "GitHub Actions",
+    "actions/setup-java": "GitHub Actions",
+    "actions/setup-go": "GitHub Actions",
+    "actions/cache": "GitHub Actions",
+    "actions/upload-artifact": "GitHub Actions",
+    "actions/download-artifact": "GitHub Actions",
+    "actions/github-script": "GitHub Actions",
+    "actions/stale": "GitHub Actions",
+    "actions/labeler": "GitHub Actions",
+    # Docker Actions
+    "docker/build-push-action": "Docker",
+    "docker/login-action": "Docker",
+    "docker/setup-buildx-action": "Docker",
+    "docker/setup-qemu-action": "Docker",
+    "docker/metadata-action": "Docker",
+    # Azure Actions
+    "azure/webapps-deploy": "Azure",
+    "azure/login": "Azure",
+    "azure/cli": "Azure",
+    "azure/docker-login": "Azure",
+    "azure/appservice-build": "Azure",
+    "azure/k8s-deploy": "Azure",
+    "azure/k8s-set-context": "Azure",
+}
+
+NOISE_ACTIONS: set[str] = set()
+
+NOISE = {
+    "java": NOISE_JAVA,
+    "py": NOISE_PYTHON,
+    "ts": NOISE_TS,
+    "actions": NOISE_ACTIONS,
+    "kotlin": NOISE_KOTLIN,
+    "go": NOISE_GO,
+    "rust": NOISE_RUST,
+    "ruby": NOISE_RUBY,
+}
+
+NORM = {
+    "java": NORM_JAVA,
+    "py": NORM_PY,
+    "ts": NORM_TS,
+    "actions": NORM_ACTIONS,
+    "kotlin": NORM_KOTLIN,
+    "go": NORM_GO,
+    "rust": NORM_RUST,
+    "ruby": NORM_RUBY,
+}
 
 
 
@@ -683,7 +996,13 @@ TARGETS = [
     "package.json",
     "pyproject.toml",
     "requirements.txt",
+    "Pipfile",
     "pom.xml",
+    "build.gradle",
+    "build.gradle.kts",
+    "go.mod",
+    "Cargo.toml",
+    "Gemfile",
     "Dockerfile",
     "dockerfile",
     "docker-compose.yml",
@@ -695,7 +1014,7 @@ TARGETS = [
 HOSTING_BLOCKLIST = {
     "github.com", "gitlab.com", "bitbucket.org",
     "npmjs.com", "npmjs.org", "pypi.org", "pypi.python.org",
-    "crates.io", "maven.org", "apache.org"
+    "crates.io", "maven.org", "apache.org", "rubygems.org", "proxy.golang.org"
 }
 
 
@@ -703,6 +1022,9 @@ PACKAGE_REGISTRY = {
     "ts": "https://registry.npmjs.org/{pkg}",
     "py": "https://pypi.org/pypi/{pkg}/json",
     "java": "https://search.maven.org/solrsearch/select?q={pkg}&rows=1&wt=json",
+    "kotlin": "https://search.maven.org/solrsearch/select?q={pkg}&rows=1&wt=json",
+    "rust": "https://crates.io/api/v1/crates/{pkg}",
+    "ruby": "https://rubygems.org/api/v1/gems/{pkg}.json",
 }
 
 

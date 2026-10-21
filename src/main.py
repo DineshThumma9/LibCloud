@@ -27,6 +27,7 @@ async def framecloud(
     max_logos: Optional[int] = Query(None, description="Max logos to display (default: all)"),
     bg_color: str = Query("#1a1b26", description="Background hex color"),
 ):
+    
     pkg_dic = await fetch_all_repos_deps(username, token)
     async with ImageResolver(github_token=token) as resolver:
         badge_dic = await resolver.resolve(pkg_dic)
