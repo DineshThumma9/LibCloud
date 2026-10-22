@@ -43,15 +43,20 @@ class ProjectLinks(BaseModel):
                     host = host.split(":")[0]
 
                 # Check for github repository
-                if "github.com" in host and not github_owner:
+                if (host == "github.com" or host.endswith(".github.com")) and not github_owner:
                     path_parts = [p for p in parsed.path.strip("/").split("/") if p]
                     non_repo_routes = {
                         "sponsors", "orgs", "users", "search", "features", "pricing",
                         "marketplace", "about", "topics", "pulls", "issues", "settings"
                     }
-                    if len(path_parts) >= 2 and path_parts[0].lower() not in non_repo_routes:
-                        github_owner = path_parts[0].replace(".git", "")
-                        github_repo = path_parts[1].replace(".git", "")
+                    if path_parts:
+                        first = path_parts[0].lower()
+                        if first in ("orgs", "users", "sponsors") and len(path_parts) >= 2:
+                            github_owner = path_parts[1].replace(".git", "")
+                        elif first not in non_repo_routes:
+                            github_owner = path_parts[0].replace(".git", "")
+                            if len(path_parts) >= 2:
+                                github_repo = path_parts[1].replace(".git", "")
                     continue
 
                 clean_host = host[4:] if host.startswith("www.") else host

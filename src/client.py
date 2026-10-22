@@ -19,20 +19,19 @@ class GraphGithubClient:
     async def __aexit__(self,*args):
         await self.close()
 
-    async def execute(self,variables,headers:dict | None = None):
+    async def execute(self, variables, headers: dict | None = None):
         try:
-            response = await self.client.post(self.url,json=variables or {},headers=headers)
+            response = await self.client.post(self.url, json=variables or {}, headers=headers)
             if response.status_code == 200:
-                data = response.json().get("data",{})
-                if "errors" in data:
-                    print(f"GraphQL errors : {data['errors']}")
-
-                return data
-            print(f"HTTP error :{response.status_code}")
+                body = response.json() or {}
+                if "errors" in body and body["errors"]:
+                    print(f"GraphQL errors: {body['errors']}")
+                return body.get("data")
+            print(f"HTTP error: {response.status_code}")
             return None 
             
         except Exception as e:
-            print(f"Error has occured with coden Error:{str(e)}")
+            print(f"Error has occurred with code Error: {str(e)}")
             return None 
     async def close(self):
         await self.client.aclose()

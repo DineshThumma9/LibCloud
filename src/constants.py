@@ -61,6 +61,7 @@ SLUG_MAP = {
     # Python — LLMs / cloud / misc
     "OpenAI": "openai",
     "Anthropic": "anthropic",
+    "Mistral": "mistral",
     "LangChain": "langchain",
     "LangGraph": "langchain",
     "LlamaIndex": "llama-index",
@@ -193,7 +194,6 @@ SLUG_MAP = {
     # Kotlin
     "Ktor": "ktor",
     "Kotlin": "kotlin",
-    "OkHttp": "square",
     "Retrofit": "square",
 }
 
@@ -250,19 +250,6 @@ NOISE_PYTHON = {
     # Google transport & auth plumbing
     "google-auth", "google-auth-httplib2", "google-auth-oauthlib",
     "google-api-core", "googleapis-common-protos",
-}
-
-NOISE_GO = {
-    # Testing & assertions
-    "github.com/stretchr/testify", "github.com/stretchr/testify/assert",
-    "github.com/stretchr/testify/require", "github.com/stretchr/testify/mock",
-    "github.com/golang/mock", "go.uber.org/mock",
-    "github.com/onsi/ginkgo", "github.com/onsi/gomega",
-    # Formatting, linters & tool dependencies
-    "golang.org/x/lint", "golang.org/x/tools", "github.com/golangci/golangci-lint",
-    # Low-level primitives & sub-packages
-    "golang.org/x/sys", "golang.org/x/xerrors", "github.com/davecgh/go-spew",
-    "github.com/pmezard/go-difflib",
 }
 
 NOISE_TS = {
@@ -490,22 +477,23 @@ NORM_PY = {
     "langchain-openai": "OpenAI",
     "langchain-anthropic": "Anthropic",
     "langchain-groq": "Groq",
-    "langchain-mistralai": "mistral",
+    "langchain-mistralai": "Mistral",
+    "mistralai": "Mistral",
     "langchain-google-genai": "Gemini",
-    "langchain-chroma": "chroma",
-    "langchain-pinecone": "pinecone",
+    "langchain-chroma": "ChromaDB",
+    "langchain-pinecone": "Pinecone",
     "langsmith": "LangChain",
-    "langchain-huggingface": "huggingface",
+    "langchain-huggingface": "Hugging Face",
     "langchain-gemini": "Gemini",
     "langchain-text-splitters": "LangChain",
     "langgraph": "LangGraph",
-    "langgraph-checkpoint-sqlite": "sqlite",
+    "langgraph-checkpoint-sqlite": "SQLite",
     "langgraph-sdk": "LangGraph",
     "langgraph-prebuilt": "LangGraph",
     "langgraph-checkpoint": "LangGraph",
     "llama-index": "LlamaIndex",
     "llama-index-core": "LlamaIndex",
-    "llama-index-llms-openai": "openai",
+    "llama-index-llms-openai": "OpenAI",
     "llama-cloud": "LlamaIndex",
     "llama-index-cli": "LlamaIndex",
     "llama-cloud-services": "LlamaIndex",
@@ -663,11 +651,9 @@ NORM_TS = {
     "sonner": "React",
     "react-responsive": "React",
     "react-infinite-scroll-component": "React",
-    "monaco-editor": "React",
     "dockerode": "Docker",
     "radix-ui": "Radix UI",     # @radix-ui/* → "radix-ui" after clean
-    "styled-components": "Styled Components",
-    "emotion": "Styled Components",   # @emotion/* → "emotion" after clean
+    "styled-components": "Styled Components",   # @emotion/* → "emotion" after clean
     "headlessui": "Tailwind CSS",     # @headlessui/* → always used with Tailwind
     "lucide-react": "Lucide",
     "lucide": "Lucide",
@@ -823,6 +809,15 @@ NORM_GO = {
 
 NOISE_GO = {
     "xerrors", "sync", "crypto", "net", "sys", "text", "tools",
+    "github.com/stretchr/testify", "github.com/stretchr/testify/assert",
+    "github.com/stretchr/testify/require", "github.com/stretchr/testify/mock",
+    "github.com/golang/mock", "go.uber.org/mock",
+    "github.com/onsi/ginkgo", "github.com/onsi/gomega",
+    # Formatting, linters & tool dependencies
+    "golang.org/x/lint", "golang.org/x/tools", "github.com/golangci/golangci-lint",
+    # Low-level primitives & sub-packages
+    "golang.org/x/sys", "golang.org/x/xerrors", "github.com/davecgh/go-spew",
+    "github.com/pmezard/go-difflib",
 }
 
 # --- Rust Normalization ---

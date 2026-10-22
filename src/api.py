@@ -11,7 +11,6 @@ from parser import DependencyParser
 from models import PKGInfo
 from pathlib import Path
 from storage import DepsDB 
-from typing import Optional
 from config import settings
 
 
@@ -26,10 +25,6 @@ class GraphGithubAPI:
         self.ghc = GraphGithubClient(token=token)
         self.dep_db = DepsDB()
         self.parser = DependencyParser()
-
-
-
-
 
     async def fetch_all_user_repos(self) -> list[dict]:
         all_repos = []
@@ -191,6 +186,36 @@ class GraphGithubAPI:
                             log.info("  │    %-50s → %d package(s)", str(pkgfile.relative_to(root)), extracted)
                         except Exception as e:
                             log.warning("  │    failed to parse %s: %s", pkgfile, e)
+
+                # Scan GitHub Actions workflows
+                wf_files = [
+                    f for f in root.glob(".github/workflows/*.y*ml")
+                    if f.is_file() and not any(p in f.parts for p in ("node_modules", ".venv", "venv", ".git", "target"))
+                ]
+                wf_files += [
+                    f for f in root.rglob(".github/workflows/*.y*ml")
+                    if f.is_file() and f not in wf_files and not any(p in f.parts for p in ("node_modules", ".venv", "venv", ".git", "target"))
+                ]
+                if wf_files:
+                    log.info("  │  found %d × workflow file(s)", len(wf_files))
+                    for wffile in wf_files:
+                        try:
+                            before = len(pkg_dic)
+                            try:
+                                content = wffile.read_text(encoding="utf-8-sig")
+                            except UnicodeDecodeError:
+                                content = wffile.read_text(encoding="utf-16")
+                            rel_path = str(wffile.relative_to(root))
+                            sub_dic = self.parser.parser(content, rel_path)
+                            for norm, info in sub_dic.items():
+                                pkg = pkg_dic[norm]
+                                pkg.count += info.count
+                                pkg.dep_origin = info.dep_origin
+                                pkg.raw_names |= info.raw_names
+                            extracted = len(pkg_dic) - before
+                            log.info("  │    %-50s → %d package(s)", rel_path, extracted)
+                        except Exception as e:
+                            log.warning("  │    failed to parse workflow %s: %s", wffile, e)
 
             except Exception as e:
                 log.error("  │  clone failed for %s/%s: %s", self.username, repo, e)

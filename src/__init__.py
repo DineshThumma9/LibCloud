@@ -6,7 +6,7 @@ if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
 from models import ProjectLinks, PyPIResponse, NPMResponse, MavenResponse, PKG_MODELS, PKGInfo
-from parser import DependencyParser, FILE_REGEX
+from parser import DependencyParser, FILE_PARSERS
 from client import GraphGithubClient
 from queries import REPOS_QUERY, REPO_DEP_QUERY
 from resolver import ImageResolver
@@ -23,7 +23,7 @@ __all__ = [
     "PKG_MODELS",
     "PKGInfo",
     "DependencyParser",
-    "FILE_REGEX",
+    "FILE_PARSERS",
     "GraphGithubClient",
     "REPOS_QUERY",
     "REPO_DEP_QUERY",

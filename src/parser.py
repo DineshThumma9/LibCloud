@@ -103,6 +103,21 @@ def parse_requirements(content: str) -> list[str]:
     return raws
 
 
+def parse_pipfile(content: str) -> list[str]:
+    raws: list[str] = []
+    try:
+        data = tomllib.loads(content)
+        for section in ("packages", "dev-packages"):
+            sec = data.get(section, {})
+            if isinstance(sec, dict):
+                for pkg in sec.keys():
+                    if isinstance(pkg, str) and pkg.strip():
+                        raws.append(pkg.strip())
+    except Exception as e:
+        log.warning("Failed parsing Pipfile: %s", e)
+    return raws
+
+
 def parse_pom_xml(content: str) -> list[str]:
     raws: list[str] = []
     try:
@@ -200,7 +215,7 @@ FILE_PARSERS: dict[str, Callable[[str], list[str]]] = {
     "pyproject.toml": parse_pyproject,
     "package.json": parse_package_json,
     "requirements.txt": parse_requirements,
-    "Pipfile": parse_requirements,
+    "Pipfile": parse_pipfile,
     "pom.xml": parse_pom_xml,
     "build.gradle": parse_gradle,
     "build.gradle.kts": parse_gradle,

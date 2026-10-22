@@ -77,9 +77,6 @@ query GetLibImage($owner: String!, $name: String!) {
     logo_github: object(expression: "HEAD:.github/logo.svg") {
       ... on Blob { text }
     }
-    logo_png: object(expression: "HEAD:logo.png") {
-      id 
-    }
   }
 }
 """
