@@ -1,5 +1,4 @@
 import logging
-import os
 from typing import Optional
 from motor.motor_asyncio import AsyncIOMotorClient
 from config import settings
@@ -25,6 +24,7 @@ class DepsDB:
         self.repo = self.db["repos"]
         self.icons = self.db["icons"]
         self._mem_icons: dict[str, str] = {}
+        self._mem_urls: dict[str, str] = {}
         self._mem_repos: dict[str, dict] = {}
         self._db_warned = False
 
@@ -44,13 +44,14 @@ class DepsDB:
         except Exception as e:
             self._warn_db(e)
 
-    async def save_icon(self, slug: str, icon_uri: str):
+    async def save_icon(self, slug: str, icon_uri: str, source_url: str = ""):
         key = slug.strip().lower()
         self._mem_icons[key] = icon_uri
+        self._mem_urls[key] = source_url
         try:
             await self.icons.update_one(
                 {"_id": key},
-                {"$set": {"icon_uri": icon_uri}},
+                {"$set": {"icon_uri": icon_uri, "source_url": source_url}},
                 upsert=True
             )
             log.info("💾 [Cache SAVED: MongoDB] Icon for %r", key)
@@ -58,23 +59,26 @@ class DepsDB:
             self._warn_db(e)
 
     async def get_icon(self, slug: str) -> Optional[str]:
+        entry = await self.get_icon_entry(slug)
+        return entry[0] if entry else None
+
+    async def get_icon_entry(self, slug: str) -> Optional[tuple[str, str]]:
         key = slug.strip().lower()
         if key in self._mem_icons:
             log.info("⚡ [Cache HIT: Memory] Icon for %r", key)
-            return self._mem_icons[key]
+            return self._mem_icons[key], self._mem_urls.get(key, "")
         try:
             doc = await self.icons.find_one({"_id": key}) 
             if doc:
                 icon_uri = doc.get("icon_uri")
+                source_url = doc.get("source_url", "")
                 if icon_uri:
                     self._mem_icons[key] = icon_uri
+                    self._mem_urls[key] = source_url
                     log.info("⚡ [Cache HIT: MongoDB] Icon for %r", key)
-                    return icon_uri
+                    return icon_uri, source_url
         except Exception as e:
             self._warn_db(e)
-        if key in self._mem_icons:
-            log.info("⚡ [Cache HIT: Memory fallback] Icon for %r", key)
-            return self._mem_icons[key]
         return None
 
     async def get_repo_deps(self, username: str, repo: str, repo_sha: str):
@@ -96,11 +100,6 @@ class DepsDB:
                 return pkg_data
         except Exception as e:
             self._warn_db(e)
-            if mem and mem.get("repo_sha") == repo_sha:
-                pkg_data = mem.get("pkg_dic")
-                pkg_count = len(pkg_data) if isinstance(pkg_data, dict) else 0
-                log.info("⚡ [Cache HIT: Memory fallback] Repo %s (sha: %s, %d packages)", user_repo_key, repo_sha[:8] if repo_sha else "none", pkg_count)
-                return pkg_data
         return None 
 
     async def save_repo_deps(self, username: str, repo: str, repo_sha: str, pkg_dic: dict):

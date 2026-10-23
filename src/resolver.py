@@ -1,6 +1,5 @@
 import asyncio
 import base64
-import csv
 import logging
 from pathlib import Path
 from typing import Optional, Union, Iterable
@@ -10,7 +9,7 @@ import struct
 from collections import Counter
 from urllib.parse import urljoin, urlparse
 
-from constants import PACKAGE_REGISTRY, SLUG_MAP, NORM
+from constants import PACKAGE_REGISTRY, SLUG_MAP, NORM,HOSTING_BLOCKLIST
 from models import PKG_MODELS, PKGInfo, ProjectLinks
 from storage import DepsDB
 from config import settings
@@ -22,6 +21,25 @@ from ops_logger import DepOpsLogger
 log = logging.getLogger(__name__)
 
 
+all_norm = {}
+for lang_map in NORM.values():
+    all_norm.update({k.lower(): v for k, v in lang_map.items()})
+
+
+class ValidationResult(tuple):
+    """
+    Tuple representing (is_valid, reason).
+    Unpacks as 2 items (is_valid, reason) for backwards compatibility with tests,
+    while also exposing .mime_type, .is_valid, and .reason attributes.
+    """
+    def __new__(cls, is_valid: bool, reason: str, mime_type: str = ""):
+        obj = super().__new__(cls, (is_valid, reason))
+        obj.is_valid = is_valid
+        obj.reason = reason
+        obj.mime_type = mime_type
+        return obj
+
+
 class ImageResolver:
     def __init__(self, timeout: float = settings.request_timeout_seconds, headers: Optional[dict] = None, github_token: Optional[str] = None):
         self.cache = DepsDB()
@@ -29,11 +47,11 @@ class ImageResolver:
         self.gh_cache: dict[str, str] = {}
         self.failed_icons: list[dict] = []
         self._seen_failed: set[str] = set()
-        self.delay = settings.request_delay_seconds
         
         # Telemetry & metrics ledgers
         self.recovery_stats = Counter()
         self.resolved_methods: dict[str, str] = {}
+        self.resolved_urls: dict[str, str] = {}
         self.validation_failures: list[dict] = []
         self._seen_validation_failures: set[str] = set()
         self.exporter = DepOpsLogger()
@@ -45,69 +63,85 @@ class ImageResolver:
         self.github_avatar_url = "https://github.com/{owner}.png?size=128"
         self.ghc = GraphGithubClient(token=github_token)
 
+    def _get_github_headers(self, accept: str = "application/vnd.github.v3+json") -> dict:
+        headers = {"User-Agent": "logo-ext/1.0", "Accept": accept}
+        if self.github_token:
+            headers["Authorization"] = f"Bearer {self.github_token}"
+        return headers
+
     @staticmethod
-    def validate_image(content: bytes, mime_type: str = "") -> tuple[bool, str]:
+    def validate_image(content: bytes, mime_type: str = "") -> ValidationResult:
         """
-        Validates image bytes. Returns (is_valid, reason).
+        Validates image bytes. Returns ValidationResult(is_valid, reason, mime_type).
         Checks file signatures (magic bytes), minimum size, and SVG structure.
         """
         if not content or len(content) < 40:
-            return False, "file_too_small_or_empty"
+            return ValidationResult(False, "file_too_small_or_empty", "")
 
         # Reject HTML error pages masked as 200 OK
         header = content[:1024].lower()
         if b"<!doctype html" in header or b"<html" in header:
-            return False, "is_html_page_not_image"
+            return ValidationResult(False, "is_html_page_not_image", "")
 
         # SVG Validation
         if b"<svg" in header or "svg" in mime_type:
             text = content.decode("utf-8", errors="ignore").lower()
             if "<svg" not in text:
-                return False, "malformed_svg_missing_svg_tag"
+                return ValidationResult(False, "malformed_svg_missing_svg_tag", "")
             if "</svg>" not in text and "/>" not in text:
-                return False, "malformed_svg_unclosed"
-            return True, "valid_svg"
+                return ValidationResult(False, "malformed_svg_unclosed", "")
+            return ValidationResult(True, "valid_svg", "image/svg+xml")
 
         # PNG Validation
         if content.startswith(b"\x89PNG\r\n\x1a\n"):
             if len(content) < 24:
-                return False, "corrupt_png_header"
+                return ValidationResult(False, "corrupt_png_header", "")
             try:
                 width, height = struct.unpack(">II", content[16:24])
                 if width <= 2 and height <= 2:
-                    return False, f"rejected_tracking_pixel_{width}x{height}"
-                return True, f"valid_png_{width}x{height}"
+                    return ValidationResult(False, f"rejected_tracking_pixel_{width}x{height}", "")
+                if width / max(height, 1) > 1.6 or height / max(width, 1) > 1.6:
+                    return ValidationResult(False, f"rejected_banner_aspect_ratio_{width}x{height}", "")
+                return ValidationResult(True, f"valid_png_{width}x{height}", "image/png")
             except Exception:
-                return True, "valid_png"
+                return ValidationResult(True, "valid_png", "image/png")
 
         # ICO Validation
         if content.startswith(b"\x00\x00\x01\x00"):
-            return True, "valid_ico"
+            return ValidationResult(True, "valid_ico", "image/x-icon")
 
         # JPEG Validation
         if content.startswith(b"\xff\xd8\xff"):
-            return True, "valid_jpeg"
+            return ValidationResult(True, "valid_jpeg", "image/jpeg")
 
         # WebP Validation
         if content.startswith(b"RIFF") and b"WEBP" in content[8:16]:
-            return True, "valid_webp"
+            return ValidationResult(True, "valid_webp", "image/webp")
 
-        return False, "unknown_unsupported_format"
+        return ValidationResult(False, "unknown_unsupported_format", "")
 
-    def _to_data_uri(self, content: bytes, mime: str = "image/png", source: str = "") -> Optional[str]:
-        is_valid, reason = ImageResolver.validate_image(content, mime)
-        if not is_valid:
-            log.info("Validation rejected image from %s: %s", source, reason)
+    def _to_data_uri(self, content: bytes, mime: str = "", source: str = "") -> Optional[str]:
+        val = ImageResolver.validate_image(content, mime)
+        if not val.is_valid:
+            log.info("Validation rejected image from %s: %s", source, val.reason)
             if source and source not in self._seen_validation_failures:
                 self._seen_validation_failures.add(source)
                 self.validation_failures.append({
                     "url": source,
-                    "reason": reason,
+                    "reason": val.reason,
                     "size_bytes": len(content)
                 })
             return None
+        detected_mime = val.mime_type or (mime if mime.startswith("image/") else "image/png")
+        if detected_mime == "image/svg+xml":
+            try:
+                text = content.decode("utf-8", errors="ignore")
+                sanitized = self._sanitize_svg(text)
+                content = sanitized.encode("utf-8")
+            except Exception as e:
+                log.debug("Failed sanitizing SVG from %s: %s", source, e)
         b64 = base64.b64encode(content).decode("utf-8")
-        return f"data:{mime};base64,{b64}"
+        return f"data:{detected_mime};base64,{b64}"
 
     @staticmethod
     def _sanitize_svg(svg_text: str) -> str:
@@ -155,12 +189,10 @@ class ImageResolver:
 
         return svg_text
 
-    async def fetch_logo_candidates(self, owner: str, repo: str) -> Optional[str]:
+    async def fetch_logo_candidates(self, owner: str, repo: str) -> Optional[tuple[str, str]]:
         """Discovers repo logo assets recursively via Git Trees API and ranks candidates."""
         url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/HEAD?recursive=1"
-        gh_headers = {"User-Agent": "logo-ext/1.0", "Accept": "application/vnd.github.v3+json"}
-        if self.github_token:
-            gh_headers["Authorization"] = f"Bearer {self.github_token}"
+        gh_headers = self._get_github_headers()
 
         try:
             response = await self.client.get(url, headers=gh_headers)
@@ -181,6 +213,9 @@ class ImageResolver:
                     continue
                 parts = set(path_lower.split("/"))
                 if parts & noise:
+                    continue
+                diagram_noise = ("diagram", "flowchart", "request", "architecture", "screenshot", "preview", "workflow", "overview", "schema", "banner", "header", "benchmark")
+                if any(term in path_lower for term in diagram_noise):
                     continue
 
                 score = 0
@@ -211,7 +246,7 @@ class ImageResolver:
                 icon = await self._fetch_image(raw_url)
                 if icon:
                     log.info("✓ Icon hit for %s/%s via repo tree asset (%s)", owner, repo, image_path)
-                    return icon
+                    return icon, raw_url
         except Exception as e:
             log.debug("Failed fetching tree for %s/%s: %s", owner, repo, e)
         return None
@@ -225,28 +260,7 @@ class ImageResolver:
             res = await self.client.get(url, follow_redirects=True)
             if res.status_code == 200 and len(res.content) > 0:
                 ct = res.headers.get("content-type", "").lower()
-                content = res.content
-                header = content[:1024].lower()
-                is_svg = "svg" in ct or b"<svg" in header
-                if is_svg:
-                    try:
-                        text = content.decode("utf-8", errors="ignore")
-                        sanitized = self._sanitize_svg(text)
-                        content = sanitized.encode("utf-8")
-                    except Exception as e:
-                        log.debug("Failed sanitizing SVG from %s: %s", url, e)
-                    mime = "image/svg+xml"
-                elif content.startswith(b"\x89PNG\r\n\x1a\n"):
-                    mime = "image/png"
-                elif content.startswith(b"\xff\xd8\xff"):
-                    mime = "image/jpeg"
-                elif content.startswith(b"\x00\x00\x01\x00"):
-                    mime = "image/x-icon"
-                elif content.startswith(b"RIFF") and b"WEBP" in content[8:16]:
-                    mime = "image/webp"
-                else:
-                    mime = ct if ct.startswith("image/") else "image/png"
-                data_uri = self._to_data_uri(content, mime, source=url)
+                data_uri = self._to_data_uri(res.content, mime=ct, source=url)
                 if data_uri:
                     self.url_cache[url] = data_uri
                     return data_uri
@@ -272,9 +286,7 @@ class ImageResolver:
         if cache_key in self.gh_cache:
             return self.gh_cache[cache_key] == "Organization"
         try:
-            gh_headers = {"User-Agent": "logo-ext/1.0"}
-            if self.github_token:
-                gh_headers["Authorization"] = f"Bearer {self.github_token}"
+            gh_headers = self._get_github_headers()
             res = await self.client.get(f"https://api.github.com/users/{owner}", headers=gh_headers)
             if res.status_code == 200:
                 account_type = res.json().get("type", "")
@@ -284,8 +296,8 @@ class ImageResolver:
             log.debug("Failed checking GitHub account type for %s: %s", owner, e)
         return False
 
-    async def fetch_iconlib(self, slug: str) -> Optional[str]:
-        """Tries distinct vector registries using auto-generated slug variations."""
+    async def fetch_iconlib(self, slug: str) -> Optional[tuple[str, str]]:
+        """Tries distinct vector registries using auto-generated slug variations. Returns (icon, source_url)."""
         raw = slug.strip().lower().replace("_", "-")
         
         compact = raw.replace(" ", "").replace("-", "").replace(".", "dot")
@@ -311,18 +323,18 @@ class ImageResolver:
             icon = await self._fetch_image(url)
             if icon:
                 log.info("✓ Icon hit for %r via %s", slug, url)
-                return icon
+                return icon, url
                 
         return None
 
-    async def resolve_heuristic(self, owner: str, repo: str, pkg_name: str) -> Optional[tuple[str, str]]:
-        """Resolves package to icon via GitHub explore topics, GraphQL probes, OpenGraph, or tree assets."""
+    async def resolve_heuristic(self, owner: str, repo: str, pkg_name: str) -> Optional[tuple[str, str, str]]:
+        """Resolves package to icon via GitHub explore topics, GraphQL probes, OpenGraph, or tree assets. Returns (icon, method, source_url)."""
         # 1. Try github/explore topics first
         topics_url = f"https://raw.githubusercontent.com/github/explore/main/topics/{pkg_name}/{pkg_name}.png"
         icon = await self._fetch_image(topics_url)
         if icon:
             log.info("✓ Icon hit for %r via topics", pkg_name)
-            return icon, "github_topic"
+            return icon, "github_topic", topics_url
         
         # 2. Query GitHub GraphQL for custom OpenGraph, homepage, and top convention paths
         payload = {
@@ -344,7 +356,7 @@ class ImageResolver:
                     icon = await self._fetch_image(og_url)
                     if icon:
                         log.info("✓ Icon hit for %r via custom OpenGraph (%s)", pkg_name, og_url)
-                        return icon, "github_opengraph"
+                        return icon, "github_opengraph", og_url
 
             # Check inlined SVG convention paths
             targets = ["logo_root", "logo_assets", "logo_docs", "logo_github"]
@@ -352,6 +364,7 @@ class ImageResolver:
                 dest = data.get(target)
                 if dest and isinstance(dest, dict) and dest.get("text"):
                     svg_text = self._sanitize_svg(dest["text"])
+                    probe_url = f"https://github.com/{owner}/{repo}/blob/HEAD/{target}.svg"
                     data_uri = self._to_data_uri(
                         svg_text.encode("utf-8"), 
                         "image/svg+xml", 
@@ -359,13 +372,13 @@ class ImageResolver:
                     )
                     if data_uri:
                         log.info("✓ Icon hit for %r via repo GraphQL probe (%s)", pkg_name, target)
-                        return data_uri, "github_repo_probe"
+                        return data_uri, "github_repo_probe", probe_url
 
             # Check homepage / docs site
             homepage = data.get("homepageUrl")
             if homepage:
                 clean_repo = repo.lower().replace("-", "").replace("_", "")
-                homepage_urls = [
+                candidate_urls = [
                     urljoin(homepage, f"/img/{repo}.svg"),
                     urljoin(homepage, f"/img/{clean_repo}.svg"),
                     urljoin(homepage, "/favicon.svg"),
@@ -376,30 +389,32 @@ class ImageResolver:
                 ]
                 domain = urlparse(homepage).netloc
                 if domain:
-                    homepage_urls.append(self.favicon_url.format(domain=domain))
+                    candidate_urls.append(self.favicon_url.format(domain=domain))
                 
-                for url in homepage_urls:
+                for url in dict.fromkeys(candidate_urls):
                     icon = await self._fetch_image(url)
                     if icon:
                         log.info("✓ Icon hit for %r via homepage (%s)", pkg_name, url)
-                        return icon, "homepage_favicon"
+                        return icon, "homepage_favicon", url
 
         # 3. Deep fallback: scan git tree
-        tree_icon = await self.fetch_logo_candidates(owner=owner, repo=repo)
-        if tree_icon:
-            return tree_icon, "github_repo_tree"
+        tree_res = await self.fetch_logo_candidates(owner=owner, repo=repo)
+        if tree_res:
+            tree_icon, tree_url = tree_res
+            return tree_icon, "github_repo_tree", tree_url
 
         return None
 
-    async def resolve_package(self, pkg_name: str, dep_origin: str, norm_name: str) -> Optional[tuple[str, str]]:
-        """Resolves package to icon via registry -> website favicon -> GitHub heuristic -> GitHub avatar."""
+    async def resolve_package(self, pkg_name: str, dep_origin: str, norm_name: str) -> Optional[tuple[str, str, str]]:
+        """Resolves package to icon via registry -> website favicon -> GitHub heuristic -> GitHub avatar. Returns (icon, method, source_url)."""
         if not dep_origin:
             return None
 
         slug = SLUG_MAP.get(norm_name, norm_name).lower()
-        res = await self.cache.get_icon(slug)
+        res = await self.cache.get_icon_entry(slug)
         if res:
-            return res, "db_cache"
+            icon, source_url = res
+            return icon, "db_cache", source_url or "db_cache"
 
         # Direct GitHub Actions repository probe
         if dep_origin == "actions":
@@ -409,9 +424,7 @@ class ImageResolver:
                 repo = parts[1].split("@")[0]
                 res_h = await self.resolve_heuristic(owner=owner, repo=repo, pkg_name=pkg_name)
                 if res_h:
-                    icon, method = res_h
-                    await self.cache.save_icon(slug, icon)
-                    return icon, method
+                    return res_h
             return None
 
         # Direct Go module repository probe
@@ -423,9 +436,7 @@ class ImageResolver:
                     repo = parts[2]
                     res_h = await self.resolve_heuristic(owner=owner, repo=repo, pkg_name=pkg_name)
                     if res_h:
-                        icon, method = res_h
-                        await self.cache.save_icon(slug, icon)
-                        return icon, method
+                        return res_h
             elif "/" in pkg_name:
                 parts = [p for p in pkg_name.split("/") if p]
                 domain = parts[0]
@@ -433,8 +444,7 @@ class ImageResolver:
                     fav_url = self.favicon_url.format(domain=domain)
                     icon = await self._fetch_image(fav_url)
                     if icon:
-                        await self.cache.save_icon(slug, icon)
-                        return icon, "homepage_favicon"
+                        return icon, "homepage_favicon", fav_url
     
         reg_template = PACKAGE_REGISTRY.get(dep_origin)
         Model = PKG_MODELS.get(dep_origin)
@@ -459,9 +469,7 @@ class ImageResolver:
                 if clean_name:
                     from urllib.parse import quote_plus
                     search_url = f"https://api.github.com/search/repositories?q={quote_plus(clean_name)}+in:name&sort=stars"
-                    gh_headers = {"User-Agent": "logo-ext/1.0", "Accept": "application/vnd.github.v3+json"}
-                    if self.github_token:
-                        gh_headers["Authorization"] = f"Bearer {self.github_token}"
+                    gh_headers = self._get_github_headers()
                     res_search = await self.client.get(search_url, headers=gh_headers)
                     if res_search.status_code == 200:
                         items = res_search.json().get("items", [])
@@ -489,18 +497,15 @@ class ImageResolver:
                     pkg_name=pkg_name
                 )
                 if res_h:
-                    icon, method = res_h
-                    await self.cache.save_icon(slug, icon)
-                    return icon, method
+                    return res_h
 
             # 2. Custom domain favicon fallback
             if links.custom_domain:
                 fav_url = self.favicon_url.format(domain=links.custom_domain)
                 icon = await self._fetch_image(fav_url)
                 if icon:
-                    await self.cache.save_icon(slug, icon)
                     log.info("✓ Icon hit for %r via website favicon (%s)", pkg_name, links.custom_domain)
-                    return icon, "homepage_favicon"
+                    return icon, "homepage_favicon", fav_url
 
             # 3. GitHub organization avatar
             if links.github_owner:
@@ -509,9 +514,8 @@ class ImageResolver:
                     avatar_url = self.github_avatar_url.format(owner=links.github_owner)
                     icon = await self._fetch_image(avatar_url)
                     if icon:
-                        await self.cache.save_icon(slug, icon)
                         log.info("✓ Icon hit for %r via GitHub organization avatar (%s)", pkg_name, links.github_owner)
-                        return icon, "github_org_avatar"
+                        return icon, "github_org_avatar", avatar_url
                 else:
                     log.debug("Skipping avatar for %r: %s is a personal User account", pkg_name, links.github_owner)
 
@@ -533,10 +537,6 @@ class ImageResolver:
         """
         items = list(pkg_dic.items()) if hasattr(pkg_dic, "items") else list(pkg_dic)
 
-        # Flatten NORM dict for quick canonical lookup
-        all_norm = {}
-        for lang_map in NORM.values():
-            all_norm.update({k.lower(): v for k, v in lang_map.items()})
 
         # 1. Group and accumulate by canonical key before fetching
         grouped: dict[str, dict] = {}
@@ -577,22 +577,22 @@ class ImageResolver:
 
                 # Check DB cache first
                 slug = SLUG_MAP.get(norm_name, norm_name)
-                cached = await self.cache.get_icon(slug)
+                cached = await self.cache.get_icon_entry(slug)
                 if cached:
-                    if entry["val_ref"]:
-                        entry["val_ref"].icon = cached
+                    cached_icon, cached_url = cached
                     self.recovery_stats["db_cache"] += 1
                     self.resolved_methods[norm_name] = "db_cache"
-                    return (norm_name, cached, count)
+                    self.resolved_urls[norm_name] = cached_url or "db_cache"
+                    return (norm_name, cached_icon, count)
 
                 # 1. Check icon libraries first
-                icon = await self.fetch_iconlib(slug)
-                if icon:
+                res_cdn = await self.fetch_iconlib(slug)
+                if res_cdn:
+                    icon, source_url = res_cdn
                     self.recovery_stats["cdn_catalog"] += 1
                     self.resolved_methods[norm_name] = "cdn_catalog"
-                    await self.cache.save_icon(slug, icon)
-                    if entry["val_ref"]:
-                        entry["val_ref"].icon = icon
+                    self.resolved_urls[norm_name] = source_url
+                    await self.cache.save_icon(slug, icon, source_url=source_url)
                     return (norm_name, icon, count)
 
                 # 2. Fall back to package registry & GitHub heuristic lookup
@@ -603,12 +603,11 @@ class ImageResolver:
                         res_pkg = await self.resolve_package(slug, dep_origin, norm_name)
 
                 if res_pkg:
-                    icon, method = res_pkg
+                    icon, method, source_url = res_pkg
                     self.recovery_stats[method] += 1
                     self.resolved_methods[norm_name] = method
-                    await self.cache.save_icon(slug, icon)
-                    if entry["val_ref"]:
-                        entry["val_ref"].icon = icon
+                    self.resolved_urls[norm_name] = source_url
+                    await self.cache.save_icon(slug, icon, source_url=source_url)
                     return (norm_name, icon, count)
 
                 log.warning("✗ Missing icon for %r — skipped from cloud", norm_name)
@@ -649,11 +648,12 @@ class ImageResolver:
         return badge_items
 
     def export_reports(self, badge_items: list[tuple[str, str, int]], should_export: bool = True):
-        """Exports all report CSVs via exporter if should_export is True."""
+        """Exports all report CSVs and HTML visual audit via exporter if should_export is True."""
         if not should_export:
             return
         self.exporter.export_failed_icons_csv(self.failed_icons)
-        self.exporter.export_output_csv(badge_items, self.resolved_methods)
+        self.exporter.export_output_csv(badge_items, self.resolved_methods, self.resolved_urls)
+        self.exporter.export_audit_html(badge_items, self.resolved_methods, self.resolved_urls)
         self.exporter.export_resolution_metrics_csv(self.recovery_stats, self.failed_icons)
         if self.validation_failures:
             self.exporter.export_validation_failures_csv(self.validation_failures)

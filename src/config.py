@@ -12,10 +12,9 @@ class Settings(BaseSettings):
     mongo_uri: Optional[str] = None
     mongo_db_name: str = "my_mongodb"
 
-    max_concurrent_repo_scans:int = 5 
-    max_concurrent_icon_resolves:int = 10
-    request_delay_seconds:float = 0.05
-    request_timeout_seconds:float = 10.0
+    max_concurrent_repo_scans: int = 5 
+    max_concurrent_icon_resolves: int = 10
+    request_timeout_seconds: float = 10.0
     
 
     @field_validator("port", mode="before")

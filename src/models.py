@@ -60,7 +60,8 @@ class ProjectLinks(BaseModel):
                     continue
 
                 clean_host = host[4:] if host.startswith("www.") else host
-                if clean_host and clean_host not in HOSTING_BLOCKLIST:
+                is_blocked_host = any(clean_host == b or clean_host.endswith("." + b) for b in HOSTING_BLOCKLIST)
+                if clean_host and not is_blocked_host:
                     if custom_domain is None:
                         # Prefer original host (e.g. www.python-httpx.org) for accurate favicon matching
                         custom_domain = host if host else clean_host
@@ -164,5 +165,28 @@ class PKGInfo(BaseModel):
     count: int = 0
     raw_names: set[str] = Field(default_factory=set)
     icon: Optional[str] = None
-    sha: Optional[str] = None
 
+    def merge(self, other: PKGInfo) -> PKGInfo:
+        if not isinstance(other, PKGInfo):
+            raise TypeError(f"Expected PKGInfo, got {type(other).__name__}")
+        self.count += other.count
+        if not self.dep_origin and other.dep_origin:
+            self.dep_origin = other.dep_origin
+        self.raw_names |= other.raw_names
+        return self
+
+    def __or__(self, other: PKGInfo) -> PKGInfo:
+        return self.merge(other)
+
+
+def merge_pkg_dicts(target: dict[str, PKGInfo], source: dict[str, PKGInfo]) -> dict[str, PKGInfo]:
+    for norm, info in source.items():
+        if norm in target:
+            target[norm].merge(info)
+        else:
+            target[norm] = PKGInfo(
+                count=info.count,
+                dep_origin=info.dep_origin,
+                raw_names=set(info.raw_names)
+            )
+    return target

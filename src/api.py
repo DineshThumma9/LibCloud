@@ -3,12 +3,10 @@ from client import GraphGithubClient
 from collections import defaultdict
 import asyncio
 import tempfile
-import glob
-import subprocess
 from constants import TARGETS
 from queries import REPO_DEP_QUERY, REPOS_QUERY
 from parser import DependencyParser
-from models import PKGInfo
+from models import PKGInfo, merge_pkg_dicts
 from pathlib import Path
 from storage import DepsDB 
 from config import settings
@@ -16,15 +14,50 @@ from config import settings
 
 log = logging.getLogger(__name__)
 
+
+def _read_file_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError:
+        return path.read_text(encoding="utf-16")
+
+
 class GraphGithubAPI:
     def __init__(self, username: str, token: str = None, allow_fork: bool = False):
         self.token = token
-        self.token_exists = bool(token)
         self.allow_fork = allow_fork 
         self.username = username
         self.ghc = GraphGithubClient(token=token)
         self.dep_db = DepsDB()
         self.parser = DependencyParser()
+
+    @property
+    def token_exists(self) -> bool:
+        return bool(self.token)
+
+    async def aclose(self):
+        if hasattr(self, "ghc") and self.ghc:
+            await self.ghc.close()
+
+    async def __aenter__(self):
+        return self 
+    
+    async def __aexit__(self, *args):
+        await self.aclose()
+
+    def _ingest_manifest_file(self, file_path: Path, origin: str, pkg_dic: dict[str, PKGInfo], root: Path):
+        try:
+            before = len(pkg_dic)
+            content = _read_file_text(file_path)
+            sub_dic = self.parser.parser(content, origin)
+            merge_pkg_dicts(pkg_dic, sub_dic)
+            extracted = len(pkg_dic) - before
+            log.info("  │    %-50s → %d package(s)", str(file_path.relative_to(root)), extracted)
+        except Exception as e:
+            log.warning("  │    failed to parse %s: %s", file_path, e)
+
+
+
 
     async def fetch_all_user_repos(self) -> list[dict]:
         all_repos = []
@@ -157,8 +190,9 @@ class GraphGithubAPI:
                 log.info("  │  clone done, scanning for: %s", TARGETS)
 
                 root = Path(tmp_dir)
+                ignore_parts = ("node_modules", ".venv", "venv", ".git", "target")
                 for target in TARGETS:
-                    found_files = [f for f in root.rglob(target) if not any(p in f.parts for p in ("node_modules", ".venv", "venv", ".git", "target"))]
+                    found_files = [f for f in root.rglob(target) if not any(p in f.parts for p in ignore_parts)]
                     if not found_files:
                         continue
                     if target.lower() in ("dockerfile", "docker-compose.yml", "docker-compose.yaml", "compose.yaml"):
@@ -170,52 +204,18 @@ class GraphGithubAPI:
                         continue
                     log.info("  │  found %d × %s", len(found_files), target)    
                     for pkgfile in found_files:
-                        try:
-                            before = len(pkg_dic)
-                            try:
-                                content = pkgfile.read_text(encoding="utf-8-sig")
-                            except UnicodeDecodeError:
-                                content = pkgfile.read_text(encoding="utf-16")
-                            sub_dic = self.parser.parser(content, target)
-                            for norm, info in sub_dic.items():
-                                pkg = pkg_dic[norm]
-                                pkg.count += info.count
-                                pkg.dep_origin = info.dep_origin
-                                pkg.raw_names |= info.raw_names
-                            extracted = len(pkg_dic) - before
-                            log.info("  │    %-50s → %d package(s)", str(pkgfile.relative_to(root)), extracted)
-                        except Exception as e:
-                            log.warning("  │    failed to parse %s: %s", pkgfile, e)
+                        self._ingest_manifest_file(pkgfile, target, pkg_dic, root)
 
                 # Scan GitHub Actions workflows
                 wf_files = [
                     f for f in root.glob(".github/workflows/*.y*ml")
-                    if f.is_file() and not any(p in f.parts for p in ("node_modules", ".venv", "venv", ".git", "target"))
-                ]
-                wf_files += [
-                    f for f in root.rglob(".github/workflows/*.y*ml")
-                    if f.is_file() and f not in wf_files and not any(p in f.parts for p in ("node_modules", ".venv", "venv", ".git", "target"))
+                    if f.is_file() and not any(p in f.parts for p in ignore_parts)
                 ]
                 if wf_files:
                     log.info("  │  found %d × workflow file(s)", len(wf_files))
                     for wffile in wf_files:
-                        try:
-                            before = len(pkg_dic)
-                            try:
-                                content = wffile.read_text(encoding="utf-8-sig")
-                            except UnicodeDecodeError:
-                                content = wffile.read_text(encoding="utf-16")
-                            rel_path = str(wffile.relative_to(root))
-                            sub_dic = self.parser.parser(content, rel_path)
-                            for norm, info in sub_dic.items():
-                                pkg = pkg_dic[norm]
-                                pkg.count += info.count
-                                pkg.dep_origin = info.dep_origin
-                                pkg.raw_names |= info.raw_names
-                            extracted = len(pkg_dic) - before
-                            log.info("  │    %-50s → %d package(s)", rel_path, extracted)
-                        except Exception as e:
-                            log.warning("  │    failed to parse workflow %s: %s", wffile, e)
+                        rel_path = str(wffile.relative_to(root))
+                        self._ingest_manifest_file(wffile, rel_path, pkg_dic, root)
 
             except Exception as e:
                 log.error("  │  clone failed for %s/%s: %s", self.username, repo, e)
@@ -251,11 +251,7 @@ class GraphGithubAPI:
         # Aggregate everything and Return 
         for r in results:
             if r:
-                for norm, info in r.items():
-                    pkg = pkg_dics[norm]
-                    pkg.count += info.count
-                    pkg.dep_origin = info.dep_origin
-                    pkg.raw_names |= info.raw_names
+                merge_pkg_dicts(pkg_dics, r)
 
         top_10 = sorted(pkg_dics.items(), key=lambda x: x[1].count, reverse=True)[:10]
         log.info("=" * 60)
@@ -279,6 +275,6 @@ class GraphGithubAPI:
 
 
 async def fetch_all_repos_deps(username: str, token: str = None, export_csv: bool = True):
-    api = GraphGithubAPI(username=username, token=token)
-    return await api.fetch_all_repos_deps(export_csv=export_csv)
+    async with GraphGithubAPI(username=username, token=token) as api:
+        return await api.fetch_all_repos_deps(export_csv=export_csv)
 

@@ -1,7 +1,5 @@
 import re 
 
-ICON_CACHE:dict[str,str] = {}
-
 
 SLUG_MAP = {
     # Java / Spring
@@ -21,7 +19,7 @@ SLUG_MAP = {
     "JWT": "jsonwebtokens",
     "Jackson": "spring",
     "Gson": "google",
-    "OkHttp": "okta",
+    "OkHttp": "square",
     "Apache HttpClient": "apache",
     "MapStruct": "mapstruct",
     "Apache Kafka": "apachekafka",
@@ -36,13 +34,20 @@ SLUG_MAP = {
     "Uvicorn": "uvicorn",
     "Gunicorn": "gunicorn",
     "Jinja": "jinja",
-    "Jinja2": "jinja",
     "Git": "git",
     # Python — data / ML
     "SQLAlchemy": "sqlalchemy",
     "Tortoise ORM": "python",
-    "Alembic": "alembic",
+    "Alembic": "sqlalchemy",
     "Qdrant": "qdrant",
+    "Groq": "groq",
+    "Android": "android",
+    "libuv": "libuv",
+    "SockJS": "sockjs",
+    "FastMCP": "fastmcp",
+    "MCP": "modelcontextprotocol",
+    "Astryx": "astryx",
+    "Beautiful Soup": "python",
     "ChromaDB": "chroma",
     "Pinecone": "pinecone",
     "Weaviate": "weaviate",
@@ -125,29 +130,17 @@ SLUG_MAP = {
     "Socket.io": "socketdotio",
     "Bcrypt": "javascript",
     "Lodash": "lodash",
-    "tailwindcss-animate": "tailwindcss",
-    "protobuf-java": "google",
-    "protobuf": "google",
     # Animation & UI Icons / Utilities
     "GSAP": "greensock",
-    "gsap": "greensock",
     "Lucide": "lucide",
-    "lucide-react": "lucide",
-    "Radix UI": "radixui",
-    "radix-ui": "radixui",
     "Vite": "vite",
-    "vite": "vite",
-    "vitejs": "vite",
     "React Router": "reactrouter",
     "Remark": "remark",
     "Unified": "unified",
     "Astro": "astro",
-    "astro": "astro",
-    "astrojs": "astro",
     # CI/CD & Cloud
     "GitHub Actions": "githubactions",
     "Azure": "azure",
-    "Microsoft Azure": "azure",
     # Java Testing & Dev
     "JUnit": "junit5",
     "REST-Assured": "rest-assured",
@@ -155,9 +148,7 @@ SLUG_MAP = {
     # Search & LLMs
     "DuckDuckGo": "duckduckgo",
     "Gemini": "googlegemini",
-    "Google Gemini": "googlegemini",
     "Vercel AI SDK": "vercel",
-    "ai": "vercel",
     # Testing & QA
     "Playwright": "playwright",
     "Pytest": "pytest",
@@ -198,15 +189,18 @@ SLUG_MAP = {
 }
 
 
+_split_colon = lambda x: x.split(":")[-1]
+_strip = lambda x: x.strip()
+
 clean_pkg = {
     "ts": lambda x: x.split("/")[0].strip("@"),
-    "java": lambda x: x.split(":")[-1],
-    "kotlin": lambda x: x.split(":")[-1],
+    "java": _split_colon,
+    "kotlin": _split_colon,
     "actions": lambda x: x.split("@")[0].strip(),
     "py": lambda x: re.sub(r'\[.*\]', '', x).strip(),
     "go": lambda x: x.split("/")[-1],
-    "rust": lambda x: x.strip(),
-    "ruby": lambda x: x.strip(),
+    "rust": _strip,
+    "ruby": _strip,
 }
 
 
@@ -253,6 +247,8 @@ NOISE_PYTHON = {
 }
 
 NOISE_TS = {
+    # Testing shims
+    "puppeteer", "jasmine",
     # --- @types/* stubs ---
     # clean_pkg strips "@types/" → "types", so one entry catches them all.
     # Individual entries kept for clarity / direct package.json hits.
@@ -271,7 +267,7 @@ NOISE_TS = {
     # CSS tooling & micro-utilities
     "postcss", "autoprefixer",
     "clsx", "class-variance-authority", "tailwind-merge", "globals",
-    "tw-animate-css", "fontsource-variable", "oxlint", "next-themes", "emotion",
+    "tw-animate-css", "fontsource-variable", "oxlint", "emotion",
     # Dev utilities
     "nodemon", "ts-node-dev", "concurrently", "rimraf", "cross-env",
     "dotenv", "dotenv-cli", "env-cmd",
@@ -283,24 +279,6 @@ NOISE_TS = {
     "tslib", "core-js", "object-assign",
     # Storybook
     "storybook",                # @storybook/* → "storybook" after clean
-}
-
-NOISE_JS = {
-    # Testing shims
-    "puppeteer", "jasmine",
-    # Babel
-    "babel-loader", "@babel/core", "@babel/preset-env", "@babel/preset-react",
-    "babel",                    # @babel/* → "babel" after clean
-    # Build & bundlers
-    "vite", "vitejs",           # vite / @vitejs/*
-    "esbuild", "rollup",
-    "webpack", "webpack-cli", "webpack-dev-server",
-    "parcel", "turbopack",
-    # Dev utilities
-    "nodemon", "cross-env", "dotenv", "dotenv-cli",
-    "rimraf", "concurrently", "npm-run-all",
-    # Low-level polyfills / utils
-    "tslib", "core-js", "object-assign",
 }
 
 
@@ -343,7 +321,7 @@ NORM_JAVA = {
     "redisson": "Redis",
     "h2": "H2 Database",
     "elasticsearch-rest-high-level-client": "Elasticsearch",
-    "co.elastic.clients:elasticsearch-java": "Elasticsearch",
+    "elasticsearch-java": "Elasticsearch",
     # OpenAPI / Swagger
     "springdoc-openapi-starter-webmvc-ui": "OpenAPI / Swagger",
     "springdoc-openapi-starter-webflux-ui": "OpenAPI / Swagger",
@@ -352,7 +330,6 @@ NORM_JAVA = {
     "jjwt-api": "JWT",
     "jjwt-impl": "JWT",
     "jjwt-jackson": "JWT",
-    "io.jsonwebtoken:jjwt-jackson": "JWT",
     "java-jwt": "JWT",
     # gRPC & Protobuf
     "grpc-protobuf": "gRPC",
@@ -394,6 +371,9 @@ NORM_JAVA = {
     "junit-vintage-engine": "JUnit",
     "junit-platform-launcher": "JUnit",
     "rest-assured": "REST-Assured",
+    # Android & Networking
+    "volley": "Android",
+    "android-sdk": "Android",
 }
 
 NORM_PY = {
@@ -413,6 +393,8 @@ NORM_PY = {
     "wtforms": "Flask",
     "django": "Django",
     "starlette": "Starlette",
+    "sse-starlette": "Starlette",
+    "uvloop": "libuv",
     "tornado": "Tornado",
     "uvicorn": "Uvicorn",
     "gunicorn": "Gunicorn",
@@ -426,6 +408,7 @@ NORM_PY = {
     "psycopg": "PostgreSQL",
     "psycopg-binary": "PostgreSQL",
     "asyncpg": "PostgreSQL",
+    "langchain-checkpoint-postgres": "PostgreSQL",
     # Databases — MySQL
     "pymysql": "MySQL",
     "aiomysql": "MySQL",
@@ -438,9 +421,11 @@ NORM_PY = {
     "redis": "Redis",
     "aioredis": "Redis",
     "redis-py": "Redis",
+    "langchain-redis": "Redis",
     # Databases — Graph / Search / Vector
     "neo4j": "Neo4j",
     "qdrant-client": "Qdrant",
+    "mcp-server-qdrant": "Qdrant",
     "chromadb": "ChromaDB",
     "pinecone-client": "Pinecone",
     "pinecone": "Pinecone",
@@ -471,6 +456,11 @@ NORM_PY = {
     # LLMs, RAG & Agents
     "openai": "OpenAI",
     "anthropic": "Anthropic",
+    "groq": "Groq",
+    "mcp": "FastMCP",
+    "fastmcp": "FastMCP",
+    "langchain-mcp-adapters": "MCP",
+    "langchain-mcp-adapter": "MCP",
     "langchain": "LangChain",
     "langchain-core": "LangChain",
     "langchain-community": "LangChain",
@@ -517,7 +507,7 @@ NORM_PY = {
     "boto3": "AWS SDK",
     "botocore": "AWS SDK",
     "aioboto3": "AWS SDK",
-    "langchain-neo4j":"neo4j",
+    "langchain-neo4j": "Neo4j",
     "aiobotocore": "AWS SDK",
     # Payments & comms
     "stripe": "Stripe",
@@ -571,6 +561,16 @@ NORM_PY = {
     "mypy": "Mypy",
     "pylint": "Pylint",
     "isort": "isort",
+    # Auth & Security
+    "python-jose": "JWT",
+    # Utilities, UI & Mobile
+    "beautifulsoup4": "Beautiful Soup",
+    "bs4": "Beautiful Soup",
+    "pypdf": "pypdf",
+    "astryxdesign": "Astryx",
+    "astryx": "Astryx",
+    "android-sdk": "Android",
+    "volley": "Android",
 }
 
 NOISE_JAVA = {
@@ -679,7 +679,7 @@ NORM_TS = {
     "mongodb": "MongoDB",
     "pg": "PostgreSQL",
     "postgres": "PostgreSQL",
-    "@neondatabase": "PostgreSQL",  # Neon serverless postgres
+    "neondatabase": "PostgreSQL",  # Neon serverless postgres
     "mysql2": "MySQL",
     "redis": "Redis",
     "ioredis": "Redis",
@@ -712,9 +712,7 @@ NORM_TS = {
     "dayjs": "React",
     # --- Monitoring & Analytics ---
     "sentry": "Sentry",
-    "@sentry": "Sentry",
     "posthog": "PostHog",
-    "@posthog": "PostHog",
     # --- Markdown & Content ---
     "remark": "Remark",
     "remark-parse": "Remark",
@@ -745,6 +743,12 @@ NORM_TS = {
     "vite-plugin-eslint": "ESLint",
     "typescript-eslint": "ESLint",
     "prettier": "Prettier",
+    # Sockets, Design & Mobile
+    "sockjs-client": "SockJS",
+    "sockjs": "SockJS",
+    "astryxdesign": "Astryx",
+    "astryx": "Astryx",
+    "android-sdk": "Android",
 }
 pkg_to_lang = {
     # Python manifests & lock files
@@ -808,14 +812,16 @@ NORM_GO = {
 }
 
 NOISE_GO = {
+    # Cleaned names (clean_pkg["go"] takes last path segment)
+    "assert", "require", "mock", "ginkgo", "gomega",
+    "lint", "golangci-lint", "go-spew", "go-difflib",
     "xerrors", "sync", "crypto", "net", "sys", "text", "tools",
-    "github.com/stretchr/testify", "github.com/stretchr/testify/assert",
+    # Full package URLs (in case queried uncleaned)
+    "github.com/stretchr/testify/assert",
     "github.com/stretchr/testify/require", "github.com/stretchr/testify/mock",
     "github.com/golang/mock", "go.uber.org/mock",
     "github.com/onsi/ginkgo", "github.com/onsi/gomega",
-    # Formatting, linters & tool dependencies
     "golang.org/x/lint", "golang.org/x/tools", "github.com/golangci/golangci-lint",
-    # Low-level primitives & sub-packages
     "golang.org/x/sys", "golang.org/x/xerrors", "github.com/davecgh/go-spew",
     "github.com/pmezard/go-difflib",
 }
@@ -917,13 +923,15 @@ NORM_KOTLIN = {
     "exposed-dao": "Exposed",
     "exposed-jdbc": "Exposed",
     "spring-boot-starter-web": "Spring Boot",
-    "spring-boot-starter-data-jpa": "Spring Boot",
+    "spring-boot-starter-data-jpa": "JPA / Hibernate",
     "retrofit": "Retrofit",
     "okhttp": "OkHttp",
     "moshi": "Moshi",
     "arrow-core": "Arrow",
     "mockk": "MockK",
     "kotest": "Kotest",
+    "volley": "Android",
+    "android-sdk": "Android",
 }
 
 NOISE_KOTLIN = {
@@ -1009,21 +1017,18 @@ TARGETS = [
 HOSTING_BLOCKLIST = {
     "github.com", "gitlab.com", "bitbucket.org",
     "npmjs.com", "npmjs.org", "pypi.org", "pypi.python.org",
-    "crates.io", "maven.org", "apache.org", "rubygems.org", "proxy.golang.org"
+    "crates.io", "maven.org", "apache.org", "rubygems.org", "proxy.golang.org",
+    "readthedocs.io", "readthedocs.org", "rtfd.io", "github.io", "gitbook.io", "pages.dev", "vercel.app"
 }
 
+
+_MAVEN_REGISTRY_URL = "https://search.maven.org/solrsearch/select?q={pkg}&rows=1&wt=json"
 
 PACKAGE_REGISTRY = {
     "ts": "https://registry.npmjs.org/{pkg}",
     "py": "https://pypi.org/pypi/{pkg}/json",
-    "java": "https://search.maven.org/solrsearch/select?q={pkg}&rows=1&wt=json",
-    "kotlin": "https://search.maven.org/solrsearch/select?q={pkg}&rows=1&wt=json",
+    "java": _MAVEN_REGISTRY_URL,
+    "kotlin": _MAVEN_REGISTRY_URL,
     "rust": "https://crates.io/api/v1/crates/{pkg}",
     "ruby": "https://rubygems.org/api/v1/gems/{pkg}.json",
-}
-
-
-
-TO_IGNORE = {
-    
 }

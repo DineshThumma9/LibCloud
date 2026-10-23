@@ -1,4 +1,3 @@
-import csv
 import json
 import logging
 import re
@@ -15,8 +14,19 @@ from constants import (
     pkg_to_lang,
 )
 from models import PKGInfo
+from ops_logger import write_csv_rows
 
 log = logging.getLogger(__name__)
+
+
+def _extract_pep508_names(deps: list) -> list[str]:
+    raws = []
+    for dep in deps:
+        if isinstance(dep, str):
+            m = re.match(r"^([A-Za-z0-9_.-]+)", dep.strip())
+            if m:
+                raws.append(m.group(1))
+    return raws
 
 
 def parse_pyproject(content: str) -> list[str]:
@@ -24,44 +34,30 @@ def parse_pyproject(content: str) -> list[str]:
     try:
         data = tomllib.loads(content)
         # PEP 621 dependencies
-        for dep in data.get("project", {}).get("dependencies", []):
-            if isinstance(dep, str):
-                m = re.match(r"^([A-Za-z0-9_.-]+)", dep.strip())
-                if m:
-                    raws.append(m.group(1))
+        raws.extend(_extract_pep508_names(data.get("project", {}).get("dependencies", [])))
 
         # PEP 621 optional-dependencies
         for opt_list in data.get("project", {}).get("optional-dependencies", {}).values():
             if isinstance(opt_list, list):
-                for dep in opt_list:
-                    if isinstance(dep, str):
-                        m = re.match(r"^([A-Za-z0-9_.-]+)", dep.strip())
-                        if m:
-                            raws.append(m.group(1))
+                raws.extend(_extract_pep508_names(opt_list))
 
         # PEP 735 dependency-groups (uv, flit)
         for grp in data.get("dependency-groups", {}).values():
             if isinstance(grp, list):
-                for item in grp:
-                    if isinstance(item, str):
-                        m = re.match(r"^([A-Za-z0-9_.-]+)", item.strip())
-                        if m:
-                            raws.append(m.group(1))
+                raws.extend(_extract_pep508_names(grp))
 
         # Poetry tool section
         poetry = data.get("tool", {}).get("poetry", {})
         if isinstance(poetry, dict):
-            for k in poetry.get("dependencies", {}).keys():
-                if k.lower() != "python":
-                    raws.append(k)
+            for sec_name in ("dependencies", "dev-dependencies"):
+                for k in poetry.get(sec_name, {}).keys():
+                    if k.lower() != "python":
+                        raws.append(k)
             for grp in poetry.get("group", {}).values():
                 if isinstance(grp, dict):
                     for k in grp.get("dependencies", {}).keys():
                         if k.lower() != "python":
                             raws.append(k)
-            for k in poetry.get("dev-dependencies", {}).keys():
-                if k.lower() != "python":
-                    raws.append(k)
     except Exception as e:
         log.debug("Falling back to regex for toml: %s", e)
         for m in re.finditer(r'["\']([A-Za-z0-9_.-]+)(?:\[[^\]]*\])?(?:\s*[><=~^!].*?)?["\']', content):
@@ -237,7 +233,6 @@ ACTION_PREFIX_NORM: dict[str, str] = {
 class DependencyParser:
 
     def __init__(self):
-        self.can: set[str] = set()
         self.can_records: list[dict] = []
         self._seen_filtered: set[tuple[str, str, str]] = set()
         self.unnormalized_records: list[dict] = []
@@ -292,7 +287,6 @@ class DependencyParser:
         cln_pkg = clean_fn(dep_name) if clean_fn else dep_name
 
         if cln_pkg in NOISE.get(lang, set()):
-            self.can.add(cln_pkg)
             record_key = (dep_name, cln_pkg, dep_origin)
             if record_key not in self._seen_filtered:
                 self._seen_filtered.add(record_key)
@@ -331,37 +325,30 @@ class DependencyParser:
         return norm_name, lang
 
     def export_filtered_csv(self, filepath: Union[str, Path] = "filtered_packages.csv") -> Path:
-        out_path = Path(filepath)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        with out_path.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(
-                f,
-                fieldnames=["raw_name", "cleaned_name", "norm_name", "dep_origin", "language", "reason", "origin_path"]
-            )
-            writer.writeheader()
-            writer.writerows(self.can_records)
+        out_path = write_csv_rows(
+            filepath,
+            ["raw_name", "cleaned_name", "norm_name", "dep_origin", "language", "reason", "origin_path"],
+            self.can_records,
+        )
         log.info("✓ Exported %d filtered/noise package records to %s", len(self.can_records), out_path)
         return out_path
 
     def export_unnormalized_csv(self, filepath: Union[str, Path] = "unnormalized_packages.csv") -> Path:
-        out_path = Path(filepath)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        rows = []
-        for (raw_name, cln_pkg, lang, fname, dep_origin), count in self._unnorm_counts.most_common():
-            rows.append({
+        rows = [
+            {
                 "cleaned_name": cln_pkg,
                 "raw_name": raw_name,
                 "count": count,
                 "language": lang,
                 "dep_origin": fname,
                 "origin_path": dep_origin,
-            })
-        with out_path.open("w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(
-                f,
-                fieldnames=["cleaned_name", "raw_name", "count", "language", "dep_origin", "origin_path"]
-            )
-            writer.writeheader()
-            writer.writerows(rows)
+            }
+            for (raw_name, cln_pkg, lang, fname, dep_origin), count in self._unnorm_counts.most_common()
+        ]
+        out_path = write_csv_rows(
+            filepath,
+            ["cleaned_name", "raw_name", "count", "language", "dep_origin", "origin_path"],
+            rows,
+        )
         log.info("✓ Exported %d unnormalized package records to %s", len(rows), out_path)
         return out_path

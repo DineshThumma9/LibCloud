@@ -1,17 +1,19 @@
 import httpx 
 
 class GraphGithubClient:
-    def __init__(self,token,url:str="https://api.github.com/graphql",timeout:int=30,headers:dict={}):
+    def __init__(self, token, url: str = "https://api.github.com/graphql", timeout: int = 30, headers: dict | None = None):
         self.token = token
         self.url = url
-        headers = {
-            "Content-Type":"application/json",
-            "Accept":"application/json",
-            "User-Agent":"GithubAnalysis"
+        req_headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": "GithubAnalysis"
         }
+        if headers:
+            req_headers.update(headers)
         if self.token:
-            headers["Authorization"] = f"Bearer {self.token}"
-        self.client = httpx.AsyncClient(timeout=timeout,headers=headers)
+            req_headers["Authorization"] = f"Bearer {self.token}"
+        self.client = httpx.AsyncClient(timeout=timeout, headers=req_headers)
 
     async def __aenter__(self):
         return self
