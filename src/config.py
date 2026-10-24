@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     mongo_uri: Optional[str] = None
     mongo_db_name: str = "my_mongodb"
-
+    frontend_url:str = ""
     max_concurrent_repo_scans: int = 5 
     max_concurrent_icon_resolves: int = 10
     request_timeout_seconds: float = 10.0

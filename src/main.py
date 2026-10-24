@@ -4,6 +4,8 @@ from fastapi import FastAPI, Response, Query
 from api import fetch_all_repos_deps
 from resolver import ImageResolver
 from utils import transform_wordcloud
+from fastapi.middleware.cors import CORSMiddleware
+from config import settings
 
 logging.basicConfig(
     level=logging.INFO,
@@ -12,6 +14,22 @@ logging.basicConfig(
 )
 
 app = FastAPI(title="LibCloud")
+
+origins = [
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:5175",
+]
+if settings.frontend_url:
+    origins.append(settings.frontend_url)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/framecloud")

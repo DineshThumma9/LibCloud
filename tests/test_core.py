@@ -9,7 +9,7 @@ if src_path not in sys.path:
     sys.path.insert(0, src_path)
 
 from models import ProjectLinks
-from resolver import ImageResolver
+from processor import ImageProcessor
 from parser import parse_pipfile, parse_workflow, DependencyParser
 from constants import SLUG_MAP, NORM
 
@@ -17,33 +17,33 @@ from constants import SLUG_MAP, NORM
 class TestImageValidation:
     def test_svg_with_xml_prolog(self):
         svg_content = b'<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40"/></svg>'
-        valid, reason = ImageResolver.validate_image(svg_content)
+        valid, reason = ImageProcessor.validate_image(svg_content)
         assert valid is True
         assert reason == "valid_svg"
 
     def test_svg_with_long_header(self):
         long_comment = b"<!-- " + (b"A" * 200) + b" -->\n"
         svg_content = long_comment + b'<svg viewBox="0 0 100 100"><rect width="10" height="10"/></svg>'
-        valid, reason = ImageResolver.validate_image(svg_content)
+        valid, reason = ImageProcessor.validate_image(svg_content)
         assert valid is True
         assert reason == "valid_svg"
 
     def test_reject_html_page(self):
         html_content = b"<!DOCTYPE html><html><head><title>404 Not Found</title></head><body>Error</body></html>"
-        valid, reason = ImageResolver.validate_image(html_content)
+        valid, reason = ImageProcessor.validate_image(html_content)
         assert valid is False
         assert reason == "is_html_page_not_image"
 
     def test_reject_tracking_pixel(self):
         # 1x1 PNG header
         png_1x1 = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + struct.pack(">II", 1, 1) + b"\x08\x06\x00\x00\x00" + (b"\x00" * 30)
-        valid, reason = ImageResolver.validate_image(png_1x1)
+        valid, reason = ImageProcessor.validate_image(png_1x1)
         assert valid is False
         assert "rejected_tracking_pixel" in reason
 
     def test_valid_png(self):
         png_32x32 = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + struct.pack(">II", 32, 32) + b"\x08\x06\x00\x00\x00" + (b"\x00" * 30)
-        valid, reason = ImageResolver.validate_image(png_32x32)
+        valid, reason = ImageProcessor.validate_image(png_32x32)
         assert valid is True
         assert "valid_png" in reason
 
@@ -193,7 +193,7 @@ class TestModelsAndAPIHelpers:
         assert target["Docker"].count == 1
 
     def test_validation_result_unpacking_and_attributes(self):
-        from resolver import ValidationResult
+        from processor import ValidationResult
         res = ValidationResult(True, "valid_svg", "image/svg+xml")
         valid, reason = res
         assert valid is True
@@ -256,11 +256,11 @@ class TestIconMappingAudit:
         assert cached_icon == "data:image/png;base64,BBB"
 
     def test_reject_widescreen_banner(self):
-        from resolver import ImageResolver
+        from processor import ImageProcessor
         import struct
         # 1200x630 banner
         banner_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + struct.pack(">II", 1200, 630) + b"\x08\x06\x00\x00\x00" + (b"\x00" * 30)
-        valid, reason = ImageResolver.validate_image(banner_bytes)
+        valid, reason = ImageProcessor.validate_image(banner_bytes)
         assert valid is False
         assert "rejected_banner_aspect_ratio" in reason
 

@@ -10,6 +10,7 @@ from parser import DependencyParser, FILE_PARSERS
 from client import GraphGithubClient
 from queries import REPOS_QUERY, REPO_DEP_QUERY
 from resolver import ImageResolver
+from processor import ImageProcessor, ValidationResult
 from utils import transform_wordcloud
 from api import fetch_all_repos_deps, GraphGithubAPI
 from storage import DepsDB
@@ -28,6 +29,8 @@ __all__ = [
     "REPOS_QUERY",
     "REPO_DEP_QUERY",
     "ImageResolver",
+    "ImageProcessor",
+    "ValidationResult",
     "transform_wordcloud",
     "fetch_all_repos_deps",
     "GraphGithubAPI",

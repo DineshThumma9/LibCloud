@@ -67,8 +67,11 @@ def parse_pyproject(content: str) -> list[str]:
 
 def parse_package_json(content: str) -> list[str]:
     raws: list[str] = []
+    # If there is preamble before the main JSON object (e.g. accidental CLI output), slice from first {
+    start = content.find("{")
+    clean_content = content[start:] if start != -1 else content
     try:
-        data = json.loads(content)
+        data = json.loads(clean_content)
         if isinstance(data, dict):
             for sec in ("dependencies", "devDependencies", "peerDependencies", "optionalDependencies"):
                 d = data.get(sec, {})
@@ -76,7 +79,10 @@ def parse_package_json(content: str) -> list[str]:
                     raws.extend(d.keys())
     except Exception as e:
         log.debug("Falling back to regex for json: %s", e)
-        for m in re.finditer(r'"((?:@[\w.-]+/)?[\w.-]+)"\s*:\s*"', content):
+        # Search specifically inside dependency blocks, avoiding top-level keys and scripts
+        dep_blocks = re.findall(r'"(?:dev|peer|optional)?[Dd]ependencies"\s*:\s*\{([^}]+)\}', content)
+        target_text = "\n".join(dep_blocks) if dep_blocks else content
+        for m in re.finditer(r'"((?:@[\w.-]+/)?[\w.-]+)"\s*:\s*"', target_text):
             raws.append(m.group(1))
     return raws
 

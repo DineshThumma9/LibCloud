@@ -63,6 +63,8 @@ SLUG_MAP = {
     "XGBoost": "xgboost",
     "CatBoost": "catboost",
     "Optuna": "optuna",
+    "OpenCV": "opencv",
+    "SQLite": "sqlite",
     # Python — LLMs / cloud / misc
     "OpenAI": "openai",
     "Anthropic": "anthropic",
@@ -239,7 +241,7 @@ NOISE_PYTHON = {
     "humanfriendly", "coloredlogs", "click-didyoumean", "click-plugins", "click-repl",
     "billiard", "amqp", "kombu", "fsspec", "blobfile", "filetype", "smmap",
     "importlib-metadata", "importlib-resources", "email-validator", "uritemplate",
-    "rpds-py", "xxhash", "zstandard", "cffi", "ecdsa", "rsa", "distro", "pyyml", "defusedxml",
+    "rpds-py", "xxhash", "zstandard", "cffi", "argon2-cffi", "argon2-cffi-bindings", "argon2", "pycparser", "pysocks", "PySocks", "tldextract", "python-whois", "ecdsa", "rsa", "distro", "pyyml", "defusedxml",
     "soupsieve", "dataclasses-json", "dataclasses_json", "durationpy",
     # Google transport & auth plumbing
     "google-auth", "google-auth-httplib2", "google-auth-oauthlib",
@@ -275,6 +277,10 @@ NOISE_TS = {
     "eventsource-parser", "lru-cache", "nanoid", "ms",
     # Excluded library with duplicate branding
     "streamdown",
+    # Script names & package.json top-level properties (in case of malformed json regex fallback)
+    "name", "version", "type", "dev", "lint", "preview", "typecheck", "scripts", "build",
+    # Micro CSS / scroll animation utilities
+    "aos",
     # Runtime shims / low-level
     "tslib", "core-js", "object-assign",
     # Storybook
@@ -388,7 +394,9 @@ NORM_PY = {
     "flask-mail": "Flask",
     "flask-bcrypt": "Flask",
     "flask-sqlalchemy": "Flask",
+    "flask-cors": "Flask",
     "fastapi-mail":"FastAPI",
+    "slowapi": "FastAPI",
 
     "wtforms": "Flask",
     "django": "Django",
@@ -422,6 +430,9 @@ NORM_PY = {
     "aioredis": "Redis",
     "redis-py": "Redis",
     "langchain-redis": "Redis",
+    # Databases — SQLite
+    "aiosqlite": "SQLite",
+    "sqlite3": "SQLite",
     # Databases — Graph / Search / Vector
     "neo4j": "Neo4j",
     "qdrant-client": "Qdrant",
@@ -436,6 +447,10 @@ NORM_PY = {
     "tortoise-orm": "Tortoise ORM",
     "alembic": "Alembic",
     # Data Science & ML
+    "opencv-python": "OpenCV",
+    "opencv-python-headless": "OpenCV",
+    "opencv-contrib-python": "OpenCV",
+    "opencv": "OpenCV",
     "numpy": "NumPy",
     "pandas": "Pandas",
     "polars": "Polars",
@@ -702,6 +717,7 @@ NORM_TS = {
     "zod": "Zod",
     "yup": "Yup",
     "valibot": "Zod",           # same category as Zod
+    "aws-sdk": "AWS SDK",
     "axios": "Axios",
     "axois": "Axios",
     "socket.io": "Socket.io",
@@ -982,6 +998,8 @@ NOISE = {
     "ruby": NOISE_RUBY,
 }
 
+ALL_NOISE: set[str] = {pkg.lower() for s in NOISE.values() for pkg in s}
+
 NORM = {
     "java": NORM_JAVA,
     "py": NORM_PY,
@@ -1018,7 +1036,8 @@ HOSTING_BLOCKLIST = {
     "github.com", "gitlab.com", "bitbucket.org",
     "npmjs.com", "npmjs.org", "pypi.org", "pypi.python.org",
     "crates.io", "maven.org", "apache.org", "rubygems.org", "proxy.golang.org",
-    "readthedocs.io", "readthedocs.org", "rtfd.io", "github.io", "gitbook.io", "pages.dev", "vercel.app"
+    "readthedocs.io", "readthedocs.org", "rtfd.io", "github.io", "gitbook.io", "pages.dev", "vercel.app",
+    "youtube.com", "youtu.be"
 }
 
 

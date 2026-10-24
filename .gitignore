@@ -15,3 +15,7 @@ output.csv
 issue.md
 plan.md
 icon_audit.html
+
+# Frontend
+libcloud/node_modules/
+libcloud/dist/
