@@ -79,7 +79,8 @@ PYTHONPATH=src uv run uvicorn main:app --host 0.0.0.0 --port 8000
 | `max_size` | `int` | `None` | Largest logo size in px |
 | `padding` | `int` | `None` | Padding between logos in px |
 | `max_logos` | `int` | `None` | Max logos to place (default: all) |
-| `bg_color` | `str` | `"#1a1b26"` | Background hex color |
+| `bg_color` | `str` | `None` | Background hex color (defaults to `#1a1b26` for dark, `#ffffff` for light) |
+| `theme` | `str` | `None` | `"dark"` (light logo plates) or `"light"` (original logos); inferred from `bg_color` when omitted |
 
 ---
 

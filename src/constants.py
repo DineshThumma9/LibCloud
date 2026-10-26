@@ -29,6 +29,7 @@ SLUG_MAP = {
     "FastAPI": "fastapi",
     "Flask": "flask",
     "Django": "django",
+    "Werkzeug": "https://raw.githubusercontent.com/pallets/werkzeug/HEAD/docs/_static/werkzeug-icon.svg",
     "Starlette": "starlette",
     "Tornado": "tornado",
     "Uvicorn": "uvicorn",
@@ -65,6 +66,18 @@ SLUG_MAP = {
     "Optuna": "optuna",
     "OpenCV": "opencv",
     "SQLite": "sqlite",
+    "PostCSS": "postcss",
+    "Oxlint": "oxc",
+    "urllib3": "urllib3",
+    "ReportLab": "reportlab",
+    "CodeMirror": "codemirror",
+    "jsPDF": "jspdf",
+    "React Native": "reactnative",
+    "python-docx": "https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons/icons/file_type_word.svg",
+    "python-pptx": "https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons/icons/file_type_powerpoint.svg",
+    "Word": "https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons/icons/file_type_word.svg",
+    "PowerPoint": "https://cdn.jsdelivr.net/gh/vscode-icons/vscode-icons/icons/file_type_powerpoint.svg",
+    "MoviePy": "https://raw.githubusercontent.com/Zulko/moviepy/HEAD/docs/_static/medias/logo.png",
     # Python — LLMs / cloud / misc
     "OpenAI": "openai",
     "Anthropic": "anthropic",
@@ -93,6 +106,8 @@ SLUG_MAP = {
     # JS/TS — frontend frameworks
     "React": "react",
     "Next.js": "nextdotjs",
+    "Node.js": "nodedotjs",
+    "HeroUI": "heroui",
     "Vue.js": "vuedotjs",
     "Nuxt.js": "nuxtdotjs",
     "Svelte": "svelte",
@@ -136,6 +151,7 @@ SLUG_MAP = {
     "GSAP": "greensock",
     "Lucide": "lucide",
     "Vite": "vite",
+    "Lottie": "lottiefiles",
     "React Router": "reactrouter",
     "Remark": "remark",
     "Unified": "unified",
@@ -205,14 +221,32 @@ clean_pkg = {
     "ruby": _strip,
 }
 
+# Family rules for plural package names, checked after exact NORM lookups.
+NORM_PATTERNS: dict[str, list[tuple[re.Pattern, str]]] = {
+    "ts": [
+        (re.compile(r"^eslint-plugin-"), "ESLint"),
+        (re.compile(r"^eslint-config-"), "ESLint"),
+        (re.compile(r"^prettier-plugin-"), "ESLint"),
+        (re.compile(r"^react-native($|-)"), "React Native"),
+        (re.compile(r"^react-"), "React"),
+        (re.compile(r"^solana($|-)"), "Solana"),
+        (re.compile(r"^vite-plugin-"), "Vite"),
+        (re.compile(r"^@vitejs/plugin-"), "vite"),
+    ],
+    "rust": [
+        (re.compile(r"^solana($|[-_])"), "Solana"),
+    ],
+}
+
 
 
 
 NOISE_PYTHON = {
     # Testing & mocking utilities
     "hypothesis", "tox", "nox", "factory-boy",
-    "faker", "freezegun", "respx", "responses", "httpretty", "vcrpy",
+ "freezegun", "respx", "responses", "httpretty", "vcrpy",
     # Security checkers
+    "cachetools",
     "bandit", "safety", "semgrep",
     # types-* stubs (catches all types-X packages)
     "types-requests", "types-setuptools", "types-redis", "types-pyyaml",
@@ -221,7 +255,7 @@ NOISE_PYTHON = {
     "typing-extensions", "setuptools", "wheel", "pip", "build",
     "poetry-core", "flit-core", "hatchling", "pdm-backend", "maturin",
     # Low-level transport & platform utilities
-    "certifi", "charset-normalizer", "idna", "urllib3", "six",
+    "certifi", "charset-normalizer", "idna", "six", "cors", "cros",
     "greenlet", "sniffio", "anyio", "async-timeout", "iniconfig",
     "packaging", "platformdirs", "filelock", "multidict", "yarl",
     "frozenlist", "aiosignal", "attrs", "exceptiongroup",
@@ -267,12 +301,13 @@ NOISE_TS = {
     "babel",                    # @babel/* → "babel" after clean
     "@babel/core", "@babel/preset-env", "@babel/preset-react", "@babel/preset-typescript",
     # CSS tooling & micro-utilities
-    "postcss", "autoprefixer",
+    "autoprefixer",
     "clsx", "class-variance-authority", "tailwind-merge", "globals",
-    "tw-animate-css", "fontsource-variable", "oxlint", "emotion",
+    "tw-animate-css", "fontsource-variable", "emotion",
+    "bun-plugin-tailwind", "cors", "cros",
     # Dev utilities
     "nodemon", "ts-node-dev", "concurrently", "rimraf", "cross-env",
-    "dotenv", "dotenv-cli", "env-cmd",
+    "dotenv", "dotenv-cli", "env-cmd", "husky", "lint-staged",
     "npm-check-updates", "patch-package", "madge", "use-stick-to-bottom", "tokenlens",
     "eventsource-parser", "lru-cache", "nanoid", "ms",
     # Excluded library with duplicate branding
@@ -285,6 +320,12 @@ NOISE_TS = {
     "tslib", "core-js", "object-assign",
     # Storybook
     "storybook",                # @storybook/* → "storybook" after clean
+    # Brandless utilities / typos
+    "brace", "cryptr", "db", "dotted-map", "expresss", "file-saver", "forge",
+    "fs-extra", "glob", "html2pdf.js", "install", "link-check", "mini-svg-data-uri",
+    "noble-hashes", "poseidon-solidity", "prompt-sync", "public-ip", "readline",
+    "simplex-noise", "tls", "tweetnacl-util", "typewriter-effect",
+    "mini-css-extract-plugin"
 }
 
 
@@ -389,6 +430,7 @@ NORM_PY = {
     "python-multipart": "FastAPI",
     "httpx-sse": "HTTPX",
     "flask": "Flask",
+    "werkzeug": "Werkzeug",
     "flask-wtf": "Flask",
     "flask-login": "Flask",
     "flask-mail": "Flask",
@@ -400,6 +442,8 @@ NORM_PY = {
 
     "wtforms": "Flask",
     "django": "Django",
+    "djangorestframework": "Django",
+    "django-rest-framework": "Django",
     "starlette": "Starlette",
     "sse-starlette": "Starlette",
     "uvloop": "libuv",
@@ -463,6 +507,7 @@ NORM_PY = {
     "torchaudio": "PyTorch",
     "tensorflow": "TensorFlow",
     "tf-keras": "Keras",
+    "tf_keras": "Keras",
     "keras": "Keras",
     "lightgbm": "LightGBM",
     "xgboost": "XGBoost",
@@ -493,9 +538,11 @@ NORM_PY = {
     "langchain-text-splitters": "LangChain",
     "langgraph": "LangGraph",
     "langgraph-checkpoint-sqlite": "SQLite",
+    "langgraph-checkpoint-postgres": "PostgreSQL",
     "langgraph-sdk": "LangGraph",
     "langgraph-prebuilt": "LangGraph",
     "langgraph-checkpoint": "LangGraph",
+    
     "llama-index": "LlamaIndex",
     "llama-index-core": "LlamaIndex",
     "llama-index-llms-openai": "OpenAI",
@@ -554,6 +601,7 @@ NORM_PY = {
     "httpx": "HTTPX",
     "requests": "Requests",
     "aiohttp": "Aiohttp",
+    "urllib3": "urllib3",
     "httpcore": "HTTPX",        # httpcore is httpx's transport layer
     "google-ai-generativelanguage": "Gemini",
     "ddgs": "DuckDuckGo",
@@ -578,10 +626,19 @@ NORM_PY = {
     "isort": "isort",
     # Auth & Security
     "python-jose": "JWT",
+    "pyjwt": "JWT",
+    "jwt": "JWT",
     # Utilities, UI & Mobile
     "beautifulsoup4": "Beautiful Soup",
     "bs4": "Beautiful Soup",
     "pypdf": "pypdf",
+    "reportlab": "ReportLab",
+    "python-docx": "python-docx",
+    "docx": "python-docx",
+    "python-pptx": "python-pptx",
+    "pptx": "python-pptx",
+    "moviepy": "MoviePy",
+    "react-native": "React Native",
     "astryxdesign": "Astryx",
     "astryx": "Astryx",
     "android-sdk": "Android",
@@ -656,6 +713,7 @@ NORM_TS = {
     "tailwind": "Tailwind CSS",
     "tailwindcss": "Tailwind CSS",
     "tailwindcss-animate": "Tailwind CSS",
+    "postcss": "PostCSS",
     "ai": "Vercel AI SDK",
     "bootstrap": "Bootstrap",
     "chakra-ui": "Chakra UI",   # @chakra-ui/* → "chakra-ui" after clean
@@ -754,17 +812,59 @@ NORM_TS = {
     "cypress": "Cypress",
     # --- Linters & Formatters ---
     "eslint": "ESLint",
+    "eslint-plugin-react": "ESLint",
     "eslint-plugin-react-hooks": "ESLint",
     "eslint-plugin-react-refresh": "ESLint",
+    "eslint-plugin-turbo": "ESLint",
     "vite-plugin-eslint": "ESLint",
     "typescript-eslint": "ESLint",
+    "oxlint": "Oxlint",
     "prettier": "Prettier",
     # Sockets, Design & Mobile
+    "codemirror": "CodeMirror",
+    "uiw": "CodeMirror",
+    "jspdf": "jsPDF",
+    "jspdf-autotable": "jsPDF",
+    "react-native": "React Native",
+    "react-native-safe-area-context": "React Native",
+    "react-native-screens": "React Native",
+    "react-native-svg": "React Native",
+    "react-native-web": "React Native",
     "sockjs-client": "SockJS",
     "sockjs": "SockJS",
     "astryxdesign": "Astryx",
     "astryx": "Astryx",
     "android-sdk": "Android",
+    # --- Wrapper / plugin aliases (parent brand) ---
+    "ts-mocha": "Mocha",
+    "hardhat-gas-reporter": "Hardhat",
+    "react-lottie": "Lottie",
+    "connect-mongo": "MongoDB",
+    "multer-storage-cloudinary": "Cloudinary",
+    "react-spotify-embed": "Spotify",
+
+
+
+    
+    "react-github-calendar": "GitHub",
+    "redux-persist": "Redux",
+    "next-pwa": "Next.js",
+    "bcrypt-ts": "Bcrypt",
+    "react-chartjs-2": "Chart.js",
+    # --- Express middleware without own logo ---
+    "connect-flash": "Express",
+    "cookieparser": "Express",
+    "ejs-mate": "Express",
+    "request-ip": "Express",
+    "method-override": "Express",
+    "multer": "Express",
+    "passport-local-mongoose": "MongoDB",
+    "use-sound": "React",
+    "fs": "Node.js",
+    "expo-constants": "Expo",
+    "nextui-org": "HeroUI",
+    "nomicfoundation": "nomiclabs",
+    "tabler": "Tabler Icons",
 }
 pkg_to_lang = {
     # Python manifests & lock files
@@ -840,6 +940,8 @@ NOISE_GO = {
     "golang.org/x/lint", "golang.org/x/tools", "github.com/golangci/golangci-lint",
     "golang.org/x/sys", "golang.org/x/xerrors", "github.com/davecgh/go-spew",
     "github.com/pmezard/go-difflib",
+    # Brandless terminal utilities
+    "liner", "go-runewidth",
 }
 
 # --- Rust Normalization ---
@@ -876,10 +978,14 @@ NORM_RUST = {
     "tonic": "gRPC",
     "prost": "Protocol Buffers",
     "criterion": "Criterion",
+    "serde-wasm-bindgen": "Serde",
 }
 
 NOISE_RUST = {
     "cfg-if", "bitflags", "lazy_static", "once_cell",
+    # Brandless low-level crates
+    "extractor", "pdf_core", "serialize_macro", "serialize_macro_traits",
+    "simple_asn1", "zkpdf-lib",
 }
 
 # --- Ruby Normalization ---
@@ -925,10 +1031,31 @@ NORM_KOTLIN = {
     "ktor-client-core": "Ktor",
     "ktor-client-cio": "Ktor",
     "kotlinx-coroutines-core": "Kotlin",
-    "kotlinx-coroutines-android": "Kotlin",
+    "kotlinx-coroutines-android": "Coroutines",
     "kotlinx-coroutines-reactive": "Kotlin",
-    "kotlinx-coroutines-reactor": "Kotlin",
-    "kotlinx-coroutines-test": "Kotlin",
+    "media3-common":"Media3",
+"media3-datasource-okhttp":"Media3",
+"media3-exoplayer-hls":"Media3",
+"media3-exoplayer-dash":"Media3",
+"richtext-ui-material3":"richext",
+"richtext-commonmark":"richtext",
+"innertubex-andriod":"innertubex",
+"innertubex":"innertubex",
+"compose-material3":"compose",
+"compose-navigation":"compose",
+"compose-foundation":"compose",
+"ktor-client-websockets":"ktor",
+"ktor-client-content-negotiation":"ktor",
+"ktor-client-content-okhttp":"ktor",
+"kotlinx-coroutines-play-services":"Couroutines",
+"icons-lucide":"Lucide",
+"dbus-java-core":"dbus",
+"dbus-java-transport-junixsocket":"dbbus",
+"slf4j-nop":"slf4j",
+
+
+    "kotlinx-coroutines-reactor": "Coroutines",
+    "kotlinx-coroutines-test": "Coroutines",
     "kotlinx-serialization-json": "Kotlin",
     "firebase-auth-ktx": "Firebase",
     "firebase-messaging-ktx": "Firebase",
@@ -969,6 +1096,8 @@ NORM_ACTIONS = {
     "actions/github-script": "GitHub Actions",
     "actions/stale": "GitHub Actions",
     "actions/labeler": "GitHub Actions",
+    "softprops/action-gh-release": "GitHub Actions",
+    "golangci/golangci-lint-action": "GitHub Actions",
     # Docker Actions
     "docker/build-push-action": "Docker",
     "docker/login-action": "Docker",

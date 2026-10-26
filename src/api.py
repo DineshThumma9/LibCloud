@@ -146,7 +146,7 @@ class GraphGithubAPI:
                 raw_fname = manifest["filename"]
                 fname = Path(raw_fname).name
 
-                if fname in ("package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb", "poetry.lock", "Pipfile.lock", "uv.lock"):
+                if fname in ("package-lock.json", "yarn.lock", "pnpm-lock.yaml", "bun.lockb", "poetry.lock", "Pipfile.lock", "uv.lock", "Cargo.lock"):
                     continue
 
                 before = len(pkg_dic)

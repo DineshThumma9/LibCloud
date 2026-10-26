@@ -8,6 +8,12 @@ log = logging.getLogger(__name__)
 class IconLib(BaseStrategy):
     async def fetch_iconlib(self, slug: str) -> Optional[tuple[str, str]]:
         """Tries distinct vector registries using auto-generated slug variations. Returns (icon, source_url)."""
+        if slug.startswith(("http://", "https://")):
+            icon = await self._fetch_image(slug)
+            if icon:
+                log.info("✓ Icon hit for %r via direct URL", slug)
+                return icon, slug
+
         raw = slug.strip().lower().replace("_", "-")
 
         compact = raw.replace(" ", "").replace("-", "").replace(".", "dot")

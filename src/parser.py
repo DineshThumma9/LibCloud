@@ -10,6 +10,7 @@ from typing import Callable, Optional, Union
 from constants import (
     NOISE,
     NORM,
+    NORM_PATTERNS,
     clean_pkg,
     pkg_to_lang,
 )
@@ -313,6 +314,11 @@ class DependencyParser:
                     return canonical, lang
 
         norm_name = NORM.get(lang, {}).get(cln_pkg, None)
+        if not norm_name:
+            for pattern, canonical in NORM_PATTERNS.get(lang, ()):
+                if pattern.match(cln_pkg):
+                    norm_name = canonical
+                    break
         if not norm_name:
             record_key = (dep_name, cln_pkg, dep_origin)
             self._unnorm_counts[(dep_name, cln_pkg, lang, fname, dep_origin)] += 1

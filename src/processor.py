@@ -1,7 +1,7 @@
 import base64
 import logging
-import re
 import struct
+import zlib
 from typing import Optional
 
 log = logging.getLogger(__name__)
@@ -57,7 +57,8 @@ class ImageProcessor:
                 width, height = struct.unpack(">II", content[16:24])
                 if width <= 2 and height <= 2:
                     return ValidationResult(False, f"rejected_tracking_pixel_{width}x{height}", "")
-                if width / max(height, 1) > 1.6 or height / max(width, 1) > 1.6:
+                aspect = max(width, height) / max(min(width, height), 1)
+                if (width >= 600 and aspect > 1.6) or aspect > 4.5:
                     return ValidationResult(False, f"rejected_banner_aspect_ratio_{width}x{height}", "")
                 return ValidationResult(True, f"valid_png_{width}x{height}", "image/png")
             except Exception:
@@ -78,50 +79,79 @@ class ImageProcessor:
         return ValidationResult(False, "unknown_unsupported_format", "")
 
     @staticmethod
-    def sanitize_svg(svg_text: str) -> str:
-        """
-        1. Strips hardcoded white background <rect> elements to eliminate bright box contrast.
-        2. Inverts near-black fills to white (#ffffff) for visibility on dark backgrounds.
-        3. Injects fill="#ffffff" if no fill is defined anywhere (preventing default black).
-        """
-        svg_text = re.sub(
-            r'<rect[^>]*fill=["\'](?:#fff(?:fff)?|white)["\'][^>]*\/?>',
-            '',
-            svg_text,
-            flags=re.IGNORECASE,
-        )
-        svg_text = re.sub(
-            r'<rect[^>]*style=["\'][^"\']*fill:\s*(?:#fff(?:fff)?|white)[^"\']*["\'][^>]*\/?>',
-            '',
-            svg_text,
-            flags=re.IGNORECASE,
-        )
+    def _png_pixels(content: bytes) -> Optional[tuple[int, int, int, bytes]]:
+        if not content.startswith(b"\x89PNG\r\n\x1a\n"):
+            return None
+        pos = 8
+        ihdr = None
+        chunks = []
+        while pos + 8 <= len(content):
+            length = struct.unpack(">I", content[pos:pos + 4])[0]
+            kind = content[pos + 4:pos + 8]
+            body = content[pos + 8:pos + 8 + length]
+            if kind == b"IHDR":
+                ihdr = struct.unpack(">IIBBBBB", body)
+            elif kind == b"IDAT":
+                chunks.append(body)
+            pos += 12 + length
+        if not ihdr or not chunks:
+            return None
+        width, height, depth, color_type, _, _, interlace = ihdr
+        if depth != 8 or color_type not in (2, 6) or interlace != 0:
+            return None
+        bpp = 3 if color_type == 2 else 4
+        stride = width * bpp
+        try:
+            raw = zlib.decompress(b"".join(chunks))
+        except zlib.error:
+            return None
+        if len(raw) < height * (stride + 1):
+            return None
+        out = bytearray(height * stride)
+        prev = bytearray(stride)
+        pos = 0
+        for y in range(height):
+            filter_type = raw[pos]
+            pos += 1
+            row = bytearray(raw[pos:pos + stride])
+            pos += stride
+            if filter_type == 1:
+                for i in range(bpp, stride):
+                    row[i] = (row[i] + row[i - bpp]) & 255
+            elif filter_type == 2:
+                for i in range(stride):
+                    row[i] = (row[i] + prev[i]) & 255
+            elif filter_type == 3:
+                for i in range(stride):
+                    left = row[i - bpp] if i >= bpp else 0
+                    row[i] = (row[i] + ((left + prev[i]) >> 1)) & 255
+            elif filter_type == 4:
+                for i in range(stride):
+                    left = row[i - bpp] if i >= bpp else 0
+                    up = prev[i]
+                    up_left = prev[i - bpp] if i >= bpp else 0
+                    p = left + up - up_left
+                    pa = abs(p - left)
+                    pb = abs(p - up)
+                    pc = abs(p - up_left)
+                    predictor = left if (pa <= pb and pa <= pc) else (up if pb <= pc else up_left)
+                    row[i] = (row[i] + predictor) & 255
+            elif filter_type != 0:
+                return None
+            out[y * stride:(y + 1) * stride] = row
+            prev = row
+        return width, height, color_type, bytes(out)
 
-        dark_colors = {
-            "#000", "#000000", "#111", "#111111", "#161618",
-            "#181717", "#1a1a1a", "#222", "#222222", "#2d3748", "black"
-        }
-
-        def replace_fill(match):
-            val = match.group(1).lower().strip()
-            if val in dark_colors:
-                return 'fill="#ffffff"'
-            return match.group(0)
-
-        svg_text = re.sub(r'fill=["\']([^"\']+)["\']', replace_fill, svg_text, flags=re.IGNORECASE)
-
-        def replace_style_fill(match):
-            val = match.group(1).lower().strip()
-            if val in dark_colors:
-                return 'fill: #ffffff'
-            return match.group(0)
-
-        svg_text = re.sub(r'fill:\s*([^;}"\']+)', replace_style_fill, svg_text, flags=re.IGNORECASE)
-
-        if "fill=" not in svg_text and "fill:" not in svg_text:
-            svg_text = re.sub(r'<svg\b([^>]*)>', r'<svg\1 fill="#ffffff">', svg_text, count=1, flags=re.IGNORECASE)
-
-        return svg_text
+    @classmethod
+    def same_pixels(cls, a: bytes, b: bytes) -> bool:
+        if a == b:
+            return True
+        try:
+            left = cls._png_pixels(a)
+            right = cls._png_pixels(b)
+        except Exception:
+            return False
+        return left is not None and left == right
 
     def to_data_uri(self, content: bytes, mime: str = "", source: str = "") -> Optional[str]:
         val = self.validate_image(content, mime)
@@ -136,12 +166,5 @@ class ImageProcessor:
                 })
             return None
         detected_mime = val.mime_type or (mime if mime.startswith("image/") else "image/png")
-        if detected_mime == "image/svg+xml":
-            try:
-                text = content.decode("utf-8", errors="ignore")
-                sanitized = self.sanitize_svg(text)
-                content = sanitized.encode("utf-8")
-            except Exception as e:
-                log.debug("Failed sanitizing SVG from %s: %s", source, e)
         b64 = base64.b64encode(content).decode("utf-8")
         return f"data:{detected_mime};base64,{b64}"

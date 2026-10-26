@@ -1,27 +1,31 @@
 
 
+import * as z from "zod";
 
 
-interface libCloudParams {
 
-    username:string,
-    max_icons:number,
-    order_by:string,
-    preset:string,
-    color:string,
-    include_forks:boolean,
-    include_private:boolean,
-    token:string,
 
-    
+const libCloudParams  = z.object({
 
-}
+    username:z.string(),
+    max_icons:z.int().default(100),
+    order_by:z.string().default("max-freq"),
+    preset:z.string().optional().default("white"),
+    color:z.string().optional().default("white"),
+    include_forks:z.boolean().default(false),
+    include_private:z.boolean().default(false),
+    token:z.string(),
 
+})
+
+
+
+const libCloudParamsType = typeof libCloudParams;
 
 
 const API_URL = "http://localhost:8000";
 
-export async function generateLogo(librequest:libCloudParams) {
+export async function generateLogo(librequest:libCloudParamsType) {
 
 
     const headers:Record<string,string> = {

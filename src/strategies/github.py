@@ -1,3 +1,4 @@
+import base64
 import logging
 from typing import Optional
 from urllib.parse import quote_plus, urlparse
@@ -8,6 +9,13 @@ from processor import ImageProcessor
 from strategies.base import BaseStrategy
 
 log = logging.getLogger(__name__)
+
+
+def _data_uri_bytes(uri: str) -> bytes:
+    try:
+        return base64.b64decode(uri.split(",", 1)[1])
+    except Exception:
+        return b""
 
 
 class HeuristicStrategy(BaseStrategy):
@@ -23,6 +31,7 @@ class HeuristicStrategy(BaseStrategy):
         self.github_token = github_token
         self.ghc = ghc or GraphGithubClient(token=github_token)
         self.github_avatar_url = "https://github.com/{owner}.png?size=128"
+        self.github_identicon_url = "https://github.com/identicons/{owner}.png?size=128"
         self.gh_cache: dict[str, str] = {}
 
     def _get_github_headers(self, accept: str = "application/vnd.github.v3+json") -> dict:
@@ -71,33 +80,36 @@ class HeuristicStrategy(BaseStrategy):
                 parts = set(path_lower.split("/"))
                 if parts & noise:
                     continue
-                diagram_noise = ("diagram", "flowchart", "request", "architecture", "screenshot", "preview", "workflow", "overview", "schema", "banner", "header", "benchmark")
+                diagram_noise = (
+                    "diagram", "flowchart", "request", "architecture", "screenshot",
+                    "preview", "workflow", "overview", "schema", "banner", "header",
+                    "benchmark", "anchor", "sample", "sponsor", "sponsors", "sponsorkit"
+                )
                 if any(term in path_lower for term in diagram_noise):
                     continue
 
-                score = 0
                 filename = path_lower.split("/")[-1]
-                if path_lower.endswith(".svg"):
-                    score += 50
-                elif path_lower.endswith(".png"):
-                    score += 20
-                elif path_lower.endswith(".ico"):
-                    score += 5
-
                 clean_filename = filename.replace("-", "").replace("_", "")
+
+                name_score = 0
                 if clean_repo in clean_filename:
-                    score += 60
-                elif filename.startswith("logo"):
-                    score += 40
-                elif filename.startswith("icon") or "brand" in filename:
-                    score += 30
+                    name_score += 60
+                elif "logo" in filename:
+                    name_score += 40
+                elif "icon" in filename or "brand" in filename:
+                    name_score += 30
                 elif "favicon" in filename:
-                    score += 15
+                    name_score += 15
 
-                if score > 0:
-                    candidates.append((score, path))
+                # Must have semantic match with repo, logo, icon, brand, or favicon
+                if name_score == 0:
+                    continue
 
-            candidates.sort(key=lambda x: x[0], reverse=True)
+                format_score = 50 if path_lower.endswith(".svg") else (20 if path_lower.endswith(".png") else 5)
+                score = name_score + format_score
+                candidates.append((score, path))
+
+            candidates.sort(key=lambda x: (x[0], -len(x[1])), reverse=True)
             for _, image_path in candidates[:5]:
                 raw_url = f"https://raw.githubusercontent.com/{owner}/{repo}/HEAD/{image_path}"
                 icon = await self._fetch_image(raw_url)
@@ -128,6 +140,20 @@ class HeuristicStrategy(BaseStrategy):
         data = (result or {}).get("repository") or {}
 
         if data:
+            targets = ["logo_root", "logo_assets", "logo_docs", "logo_github"]
+            for target in targets:
+                dest = data.get(target)
+                if dest and isinstance(dest, dict) and dest.get("text"):
+                    probe_url = f"https://github.com/{owner}/{repo}/blob/HEAD/{target}.svg"
+                    data_uri = self.processor.to_data_uri(
+                        dest["text"].encode("utf-8"),
+                        "image/svg+xml",
+                        source=f"github:{owner}/{repo}:{target}",
+                    )
+                    if data_uri:
+                        log.info("✓ Icon hit for %r via repo GraphQL probe (%s)", pkg_name or repo, target)
+                        return data_uri, "github_repo_probe", probe_url
+
             if data.get("usesCustomOpenGraphImage"):
                 og_url = data.get("openGraphImageUrl")
                 if og_url:
@@ -135,21 +161,6 @@ class HeuristicStrategy(BaseStrategy):
                     if icon:
                         log.info("✓ Icon hit for %r via custom OpenGraph (%s)", pkg_name or repo, og_url)
                         return icon, "github_opengraph", og_url
-
-            targets = ["logo_root", "logo_assets", "logo_docs", "logo_github"]
-            for target in targets:
-                dest = data.get(target)
-                if dest and isinstance(dest, dict) and dest.get("text"):
-                    svg_text = self.processor.sanitize_svg(dest["text"])
-                    probe_url = f"https://github.com/{owner}/{repo}/blob/HEAD/{target}.svg"
-                    data_uri = self.processor.to_data_uri(
-                        svg_text.encode("utf-8"),
-                        "image/svg+xml",
-                        source=f"github:{owner}/{repo}:{target}",
-                    )
-                    if data_uri:
-                        log.info("✓ Icon hit for %r via repo GraphQL probe (%s)", pkg_name or repo, target)
-                        return data_uri, "github_repo_probe", probe_url
 
         return None
 
@@ -186,15 +197,22 @@ class HeuristicStrategy(BaseStrategy):
         return None
 
     async def resolve_avatar(self, owner: str, pkg_name: str = "") -> Optional[tuple[str, str, str]]:
-        if await self._is_github_org(owner):
-            avatar_url = self.github_avatar_url.format(owner=owner)
-            icon = await self._fetch_image(avatar_url)
-            if icon:
-                log.info("✓ Icon hit for %r via GitHub organization avatar (%s)", pkg_name or owner, owner)
-                return icon, "github_org_avatar", avatar_url
-        else:
+        if not await self._is_github_org(owner):
             log.debug("Skipping avatar for %r: %s is a personal User account", pkg_name or owner, owner)
-        return None
+            return None
+        avatar_url = self.github_avatar_url.format(owner=owner)
+        icon = await self._fetch_image(avatar_url)
+        if not icon:
+            return None
+        identicon = await self._fetch_image(self.github_identicon_url.format(owner=owner))
+        if not identicon:
+            log.info("Skipping unverifiable GitHub avatar for %r (%s)", pkg_name or owner, owner)
+            return None
+        if self.processor.same_pixels(_data_uri_bytes(icon), _data_uri_bytes(identicon)):
+            log.info("Skipping default GitHub avatar for %r (%s)", pkg_name or owner, owner)
+            return None
+        log.info("✓ Icon hit for %r via GitHub organization avatar (%s)", pkg_name or owner, owner)
+        return icon, "github_org_avatar", avatar_url
 
     async def resolve(self, owner: str, repo: str, pkg_name: str = "") -> Optional[tuple[str, str, str]]:
         """Resolves package to icon via GitHub explore topics, GraphQL probes, OpenGraph, or tree assets."""

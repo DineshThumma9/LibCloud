@@ -43,7 +43,8 @@ async def framecloud(
     max_size: Optional[int] = Query(None, description="Maximum logo size in pixels"),
     padding: Optional[int] = Query(None, description="Padding between logos in pixels"),
     max_logos: Optional[int] = Query(None, description="Max logos to display (default: all)"),
-    bg_color: str = Query("#1a1b26", description="Background hex color"),
+    bg_color: Optional[str] = Query(None, description="Background hex color (defaults based on theme)"),
+    theme: Optional[str] = Query(None, description="Theme: 'dark' (light logo plates) or 'light' (original logos)"),
 ):
     
     pkg_dic = await fetch_all_repos_deps(username, token)
@@ -59,5 +60,6 @@ async def framecloud(
         padding=padding,
         max_logos=max_logos,
         bg_color=bg_color,
+        theme=theme,
     )
     return Response(content=svg_content, media_type="image/svg+xml")

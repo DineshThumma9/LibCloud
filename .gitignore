@@ -19,3 +19,7 @@ icon_audit.html
 # Frontend
 libcloud/node_modules/
 libcloud/dist/
+report.md 
+**/__pycache__/**
+*.pyc
+*/src/strategies/__pycache__/*

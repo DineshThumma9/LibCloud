@@ -1,5 +1,6 @@
 import pytest
 import struct
+import zlib
 from pathlib import Path
 import sys
 
@@ -12,6 +13,23 @@ from models import ProjectLinks
 from processor import ImageProcessor
 from parser import parse_pipfile, parse_workflow, DependencyParser
 from constants import SLUG_MAP, NORM
+
+
+def _make_png(width, height, rows, filter_type=0):
+    prev = bytes(width * 3)
+    raw = b""
+    for row in rows:
+        current = bytes(row)
+        if filter_type == 2:
+            current = bytes((value - up) & 255 for value, up in zip(current, prev))
+        raw += bytes([filter_type]) + current
+        prev = bytes(row)
+
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+
+    ihdr = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
 
 
 class TestImageValidation:
@@ -46,6 +64,14 @@ class TestImageValidation:
         valid, reason = ImageProcessor.validate_image(png_32x32)
         assert valid is True
         assert "valid_png" in reason
+
+    def test_svg_content_is_preserved(self):
+        import base64
+        svg = b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#fff"></rect><path fill="#010101" d="M0 0h10v10z"/></svg>'
+        uri = ImageProcessor().to_data_uri(svg, "image/svg+xml")
+        decoded = base64.b64decode(uri.split(",", 1)[1]).decode("utf-8")
+        assert 'fill="#010101"' in decoded
+        assert 'fill="#fff"' in decoded
 
 
 class TestProjectLinksURLParsing:
@@ -136,6 +162,11 @@ class TestConstantsFixes:
         assert SLUG_MAP["OkHttp"] == "square"
         assert SLUG_MAP["Google Gemini"] == "googlegemini"
         assert SLUG_MAP["Radix UI"] == "radixui"
+        assert SLUG_MAP["Werkzeug"].endswith("werkzeug-icon.svg")
+        assert SLUG_MAP["Node.js"] == "nodedotjs"
+        assert SLUG_MAP["HeroUI"] == "heroui"
+        assert "Tabler Icons" not in SLUG_MAP
+        assert "Nomic Foundation" not in SLUG_MAP
 
     def test_go_subpackage_noise_filtering(self):
         parser = DependencyParser()
@@ -280,11 +311,365 @@ class TestIconMappingAudit:
             ("beautifulsoup4", "pyproject.toml", "Beautiful Soup", "py"),
             ("sockjs-client", "package.json", "SockJS", "ts"),
             ("astryxdesign", "package.json", "Astryx", "ts"),
+            ("reportlab", "requirements.txt", "ReportLab", "py"),
+            ("tf_keras", "requirements.txt", "Keras", "py"),
+            ("tf-keras", "requirements.txt", "Keras", "py"),
+            ("urllib3", "requirements.txt", "urllib3", "py"),
+            ("@uiw/react-codemirror", "package.json", "CodeMirror", "ts"),
+            ("jspdf-autotable", "package.json", "jsPDF", "ts"),
+            ("jspdf", "package.json", "jsPDF", "ts"),
+            ("postcss", "package.json", "PostCSS", "ts"),
+            ("oxlint", "package.json", "Oxlint", "ts"),
+            ("djangorestframework", "requirements.txt", "Django", "py"),
+            ("pyjwt", "requirements.txt", "JWT", "py"),
+            ("moviepy", "requirements.txt", "MoviePy", "py"),
+            ("react-native-safe-area-context", "package.json", "React Native", "ts"),
+            ("react-native-screens", "package.json", "React Native", "ts"),
+            ("react-native-svg", "package.json", "React Native", "ts"),
+            ("react-native-web", "package.json", "React Native", "ts"),
+            ("eslint-plugin-react", "package.json", "ESLint", "ts"),
+            ("eslint-plugin-turbo", "package.json", "ESLint", "ts"),
+            ("softprops/action-gh-release", ".github/workflows/deploy.yml", "GitHub Actions", "actions"),
+            ("golangci/golangci-lint-action", ".github/workflows/lint.yml", "GitHub Actions", "actions"),
             ("volley", "pom.xml", "Android", "java"),
             ("android-sdk", "pom.xml", "Android", "java"),
+            ("solana-sdk", "Cargo.toml", "Solana", "rust"),
+            ("solana-program", "Cargo.toml", "Solana", "rust"),
+            ("solana-client", "Cargo.toml", "Solana", "rust"),
+            ("solana-rpc-client", "Cargo.toml", "Solana", "rust"),
+            ("@solana/web3.js", "package.json", "Solana", "ts"),
+            ("@solana/spl-token", "package.json", "Solana", "ts"),
+            ("@solana-developers/helpers", "package.json", "Solana", "ts"),
+            ("eslint-plugin-jsx-a11y", "package.json", "ESLint", "ts"),
+            ("react-native-gesture-handler", "package.json", "React Native", "ts"),
+            ("ts-mocha", "package.json", "Mocha", "ts"),
+            ("hardhat-gas-reporter", "package.json", "Hardhat", "ts"),
+            ("vite-plugin-node-polyfills", "package.json", "Vite", "ts"),
+            ("react-lottie", "package.json", "Lottie", "ts"),
+            ("connect-mongo", "package.json", "MongoDB", "ts"),
+            ("multer-storage-cloudinary", "package.json", "Cloudinary", "ts"),
+            ("react-spotify-embed", "package.json", "Spotify", "ts"),
+            ("react-github-calendar", "package.json", "GitHub", "ts"),
+            ("redux-persist", "package.json", "Redux", "ts"),
+            ("next-pwa", "package.json", "Next.js", "ts"),
+            ("bcrypt-ts", "package.json", "Bcrypt", "ts"),
+            ("serde-wasm-bindgen", "Cargo.toml", "Serde", "rust"),
+            ("connect-flash", "package.json", "Express", "ts"),
+            ("cookieparser", "package.json", "Express", "ts"),
+            ("ejs-mate", "package.json", "Express", "ts"),
+            ("request-ip", "package.json", "Express", "ts"),
+            ("passport-local-mongoose", "package.json", "MongoDB", "ts"),
+            ("react-confetti", "package.json", "React", "ts"),
+            ("react-cool-inview", "package.json", "React", "ts"),
+            ("use-sound", "package.json", "React", "ts"),
+            ("react-chartjs-2", "package.json", "Chart.js", "ts"),
+            ("werkzeug", "requirements.txt", "Werkzeug", "py"),
+            ("multer", "package.json", "Express", "ts"),
+            ("method-override", "package.json", "Express", "ts"),
+            ("fs", "package.json", "Node.js", "ts"),
+            ("expo-constants", "package.json", "Expo", "ts"),
+            ("@nextui-org/react", "package.json", "HeroUI", "ts"),
+            ("@nomiclabs/hardhat-ethers", "package.json", "nomiclabs", "ts"),
+            ("@nomicfoundation/hardhat-ethers", "package.json", "nomiclabs", "ts"),
+            ("@tabler/icons-react", "package.json", "Tabler Icons", "ts"),
         ]
 
         for raw, fname, expected_norm, expected_lang in cases:
             norm, lang = parser.normalize_pkg(raw, fname)
             assert norm == expected_norm, f"Expected {raw} -> {expected_norm}, got {norm}"
             assert lang == expected_lang
+
+    def test_noise_filtering(self):
+        from parser import DependencyParser
+        parser = DependencyParser()
+        noise_samples = [
+            ("cors", "package.json"),
+            ("cros", "package.json"),
+            ("bun-plugin-tailwind", "package.json"),
+            ("husky", "package.json"),
+            ("cors", "requirements.txt"),
+            ("install", "package.json"),
+            ("glob", "package.json"),
+            ("tls", "package.json"),
+            ("db", "package.json"),
+            ("simple_asn1", "Cargo.toml"),
+            ("zkpdf-lib", "Cargo.toml"),
+            ("github.com/peterh/liner", "go.mod"),
+            ("github.com/mattn/go-runewidth", "go.mod"),
+        ]
+        for raw, fname in noise_samples:
+            norm, lang = parser.normalize_pkg(raw, fname)
+            assert norm is None, f"Expected {raw} in {fname} to be filtered as noise, got {norm}"
+
+    @pytest.mark.anyio
+    async def test_db_cache_evicts_invalid_banner(self):
+        import base64
+        import struct
+        from storage import DepsDB
+        from processor import ImageProcessor
+        from strategies.dbcache import DBCache
+
+        db = DepsDB()
+        proc = ImageProcessor()
+        db_cache = DBCache(cache=db, processor=proc)
+
+        # Create a 1280x640 banner data URI
+        banner_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + struct.pack(">II", 1280, 640) + b"\x08\x06\x00\x00\x00" + (b"\x00" * 30)
+        banner_uri = f"data:image/png;base64,{base64.b64encode(banner_bytes).decode()}"
+
+        await db.save_icon("test-banner-pkg", banner_uri, source_url="https://example.com/banner.png")
+        # DBCache should validate and reject the banner, returning None
+        res = await db_cache.resolve("test-banner-pkg")
+        assert res is None
+
+    @pytest.mark.anyio
+    async def test_bs4_favicon_strategy_extracts_brand_svg(self, monkeypatch):
+        import httpx
+        from processor import ImageProcessor
+        from strategies.favicon import FaviconStrategy
+
+        html_sample = """
+        <html>
+            <head>
+                <link rel="icon" type="image/svg+xml" href="/brand-icon.svg">
+            </head>
+            <body>
+                <a class="navbar-brand" href="/"><img src="/static/img/brand-logo.svg" alt="Brand Logo"></a>
+            </body>
+        </html>
+        """
+        svg_bytes = b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40"/></svg>'
+
+        class MockResponse:
+            def __init__(self, text="", content=b"", status_code=200, url="https://example.com/"):
+                self.text = text
+                self.content = content
+                self.status_code = status_code
+                self.url = httpx.URL(url)
+                self.headers = {"content-type": "image/svg+xml" if content else "text/html"}
+
+        async def mock_get(client, url, *args, **kwargs):
+            url_str = str(url)
+            if url_str in ("https://example.com/", "https://example.com"):
+                return MockResponse(text=html_sample, status_code=200, url="https://example.com/")
+            if "brand-logo.svg" in url_str:
+                return MockResponse(content=svg_bytes, status_code=200, url=url_str)
+            return MockResponse(status_code=404)
+
+        async with httpx.AsyncClient() as client:
+            monkeypatch.setattr(client, "get", lambda *a, **kw: mock_get(client, *a, **kw))
+            proc = ImageProcessor()
+            fav = FaviconStrategy(client, proc)
+            res = await fav.resolve_domain("example.com", "example-pkg")
+            assert res is not None
+            icon_uri, method, source_url = res
+            assert method == "homepage_favicon"
+            assert "brand-logo.svg" in source_url
+            assert icon_uri.startswith("data:image/svg+xml;base64,")
+
+
+class TestDependencyGraphLockfiles:
+    @pytest.mark.anyio
+    async def test_lockfile_manifests_are_skipped(self):
+        from unittest.mock import AsyncMock
+        from api import GraphGithubAPI
+
+        api = GraphGithubAPI("test_user")
+        api.dep_db.get_repo_deps = AsyncMock(return_value=None)
+        api.dep_db.save_repo_deps = AsyncMock()
+
+        async def fake_execute(*args, **kwargs):
+            return {
+                "repository": {
+                    "dependencyGraphManifests": {
+                        "nodes": [
+                            {"filename": "Cargo.lock", "dependencies": {"nodes": [{"packageName": "bytemuck"}]}},
+                            {"filename": "package-lock.json", "dependencies": {"nodes": [{"packageName": "left-pad"}]}},
+                            {"filename": "Cargo.toml", "dependencies": {"nodes": [{"packageName": "serde"}]}},
+                            {"filename": "package.json", "dependencies": {"nodes": [{"packageName": "react"}]}},
+                        ]
+                    }
+                }
+            }
+
+        api.ghc.execute = fake_execute
+        try:
+            pkg_dic = await api.fetch_repo_deps("test-repo")
+        finally:
+            await api.aclose()
+
+        assert "Serde" in pkg_dic
+        assert "React" in pkg_dic
+        assert "bytemuck" not in pkg_dic
+        assert "left-pad" not in pkg_dic
+
+
+class TestActionsFallback:
+    @pytest.mark.anyio
+    async def test_action_owner_avatar_fallback(self):
+        from unittest.mock import AsyncMock
+        from resolver import ImageResolver
+
+        resolver = ImageResolver(github_token=None)
+        resolver.db_cache.resolve = AsyncMock(return_value=None)
+        resolver.github.resolve = AsyncMock(return_value=None)
+        avatar = ("data:image/png;base64,AAA", "github_org_avatar", "https://github.com/foundry-rs.png")
+        resolver.github.resolve_avatar = AsyncMock(return_value=avatar)
+        try:
+            res = await resolver.resolve_package(
+                "foundry-rs/foundry-toolchain@v1", "actions", "foundry-rs/foundry-toolchain"
+            )
+        finally:
+            await resolver.aclose()
+
+        assert res == avatar
+        resolver.github.resolve.assert_awaited_once_with(
+            "foundry-rs", "foundry-toolchain", "foundry-rs/foundry-toolchain@v1"
+        )
+        resolver.github.resolve_avatar.assert_awaited_once_with(
+            "foundry-rs", "foundry-rs/foundry-toolchain@v1"
+        )
+
+
+class TestGithubDefaultAvatar:
+    def test_same_pixels_with_different_png_filters(self):
+        rows = [[255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255]] * 4
+        a = _make_png(4, 4, rows, 0)
+        b = _make_png(4, 4, rows, 2)
+        changed = [[0, 0, 255, 255, 255, 0, 0, 255, 0, 255, 0, 255]] * 4
+
+        assert a != b
+        assert ImageProcessor.same_pixels(a, b) is True
+        assert ImageProcessor.same_pixels(a, _make_png(4, 4, changed, 0)) is False
+
+    @pytest.mark.anyio
+    async def test_default_org_avatar_is_skipped(self, monkeypatch):
+        import httpx
+        from unittest.mock import AsyncMock
+        from strategies.github import HeuristicStrategy
+
+        rows = [[255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255]] * 4
+        avatar = _make_png(4, 4, rows, 0)
+        identicon = _make_png(4, 4, rows, 2)
+
+        class MockResponse:
+            def __init__(self, content):
+                self.content = content
+                self.status_code = 200
+                self.headers = {"content-type": "image/png"}
+
+        async def mock_get(client, url, *args, **kwargs):
+            return MockResponse(identicon if "identicons" in str(url) else avatar)
+
+        async with httpx.AsyncClient() as client:
+            monkeypatch.setattr(client, "get", lambda *a, **kw: mock_get(client, *a, **kw))
+            strategy = HeuristicStrategy(client, ImageProcessor())
+            strategy._is_github_org = AsyncMock(return_value=True)
+            assert await strategy.resolve_avatar("example-org", "example-pkg") is None
+
+    @pytest.mark.anyio
+    async def test_custom_org_avatar_is_kept(self, monkeypatch):
+        import httpx
+        from unittest.mock import AsyncMock
+        from strategies.github import HeuristicStrategy
+
+        avatar_rows = [[255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255]] * 4
+        identicon_rows = [[0, 0, 255, 255, 255, 0, 0, 255, 0, 255, 0, 255]] * 4
+        avatar = _make_png(4, 4, avatar_rows, 0)
+        identicon = _make_png(4, 4, identicon_rows, 0)
+
+        class MockResponse:
+            def __init__(self, content):
+                self.content = content
+                self.status_code = 200
+                self.headers = {"content-type": "image/png"}
+
+        async def mock_get(client, url, *args, **kwargs):
+            return MockResponse(identicon if "identicons" in str(url) else avatar)
+
+        async with httpx.AsyncClient() as client:
+            monkeypatch.setattr(client, "get", lambda *a, **kw: mock_get(client, *a, **kw))
+            strategy = HeuristicStrategy(client, ImageProcessor())
+            strategy._is_github_org = AsyncMock(return_value=True)
+            res = await strategy.resolve_avatar("example-org", "example-pkg")
+
+        assert res is not None
+        assert res[1] == "github_org_avatar"
+
+    @pytest.mark.anyio
+    async def test_unverifiable_org_avatar_is_skipped(self, monkeypatch):
+        import httpx
+        from unittest.mock import AsyncMock
+        from strategies.github import HeuristicStrategy
+
+        avatar = _make_png(4, 4, [[255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255]] * 4, 0)
+
+        class MockResponse:
+            def __init__(self, content=b"", status_code=200):
+                self.content = content
+                self.status_code = status_code
+                self.headers = {"content-type": "image/png"}
+
+        async def mock_get(client, url, *args, **kwargs):
+            if "identicons" in str(url):
+                return MockResponse(status_code=404)
+            return MockResponse(content=avatar)
+
+        async with httpx.AsyncClient() as client:
+            monkeypatch.setattr(client, "get", lambda *a, **kw: mock_get(client, *a, **kw))
+            strategy = HeuristicStrategy(client, ImageProcessor())
+            strategy._is_github_org = AsyncMock(return_value=True)
+            assert await strategy.resolve_avatar("example-org", "example-pkg") is None
+
+
+class TestWordcloudSvg:
+    def test_empty_input_uses_preset_dimensions(self):
+        from utils import transform_wordcloud
+        svg = transform_wordcloud({}, preset="readme")
+        assert 'width="920"' in svg
+        assert 'height="540"' in svg
+
+    def test_max_logos_keeps_highest_counts(self):
+        from utils import transform_wordcloud
+        badges = [
+            ("A", "data:image/png;base64,AAA", 10),
+            ("B", "data:image/png;base64,BBB", 5),
+            ("C", "data:image/png;base64,CCC", 1),
+        ]
+        svg = transform_wordcloud(badges, preset="web", max_logos=2)
+        assert svg.count('class="logo-item"') == 2
+        assert "A (10)" in svg
+        assert "B (5)" in svg
+        assert "C (1)" not in svg
+
+    def test_dark_theme_adds_plates(self):
+        from utils import transform_wordcloud
+        badges = [("A", "data:image/png;base64,AAA", 1)]
+        svg = transform_wordcloud(badges, preset="web", theme="dark")
+        assert svg.count('class="logo-plate"') == 1
+        assert 'fill="#f1f5f9"' in svg
+        assert '<rect width="1400" height="900" rx="16" fill="#1a1b26"' in svg
+
+    def test_light_theme_omits_plates(self):
+        from utils import transform_wordcloud
+        badges = [("A", "data:image/png;base64,AAA", 1)]
+        svg = transform_wordcloud(badges, preset="web", theme="light")
+        assert 'class="logo-plate"' not in svg
+        assert '<rect width="1400" height="900" rx="16" fill="#ffffff"' in svg
+
+    def test_theme_inferred_from_light_background(self):
+        from utils import transform_wordcloud
+        badges = [("A", "data:image/png;base64,AAA", 1)]
+        svg = transform_wordcloud(badges, preset="web", bg_color="#f8fafc")
+        assert 'class="logo-plate"' not in svg
+
+    def test_light_only_svg_gets_dark_plate(self):
+        import base64
+        from utils import transform_wordcloud
+        white_svg = b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path fill="#ffffff" d="M0 0h10v10z"/></svg>'
+        uri = "data:image/svg+xml;base64," + base64.b64encode(white_svg).decode()
+        badges = [("A", uri, 1)]
+        dark = transform_wordcloud(badges, preset="web", theme="dark")
+        light = transform_wordcloud(badges, preset="web", theme="light")
+        assert 'fill="#475569"' in dark
+        assert 'fill="#475569"' in light

@@ -1,8 +1,75 @@
+import base64
 import math
 import logging
+import re
 from typing import Union, Iterable, Optional
 
 log = logging.getLogger(__name__)
+
+LOGO_PLATE = "#f1f5f9"
+DARK_PLATE = "#475569"
+DEFAULT_DARK_BG = "#1a1b26"
+DEFAULT_LIGHT_BG = "#ffffff"
+
+_HEX_COLOR = re.compile(r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+_SVG_PAINT = re.compile(
+    r'(?:fill|stroke|stop-color|color)\s*[:=]\s*["\']?\s*(#[0-9a-fA-F]{3,6}|rgba?\([^)]*\)|white|black|currentColor)',
+    re.IGNORECASE,
+)
+
+
+def _relative_luminance(color: str) -> Optional[float]:
+    value = color.strip()
+    if value.lower() == "white":
+        return 1.0
+    if value.lower() == "black":
+        return 0.0
+    if value.lower() == "currentcolor":
+        return None
+    if value.lower().startswith("rgb"):
+        numbers = re.findall(r"[\d.]+", value)
+        if len(numbers) < 3:
+            return None
+        channels = [min(float(n), 255) / 255 for n in numbers[:3]]
+    else:
+        match = _HEX_COLOR.match(value)
+        if not match:
+            return None
+        digits = match.group(1)
+        if len(digits) == 3:
+            digits = "".join(c * 2 for c in digits)
+        channels = [int(digits[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    linear = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4 for c in channels]
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+
+def _is_light_color(color: str) -> bool:
+    luminance = _relative_luminance(color)
+    return luminance is not None and luminance > 0.5
+
+
+def _svg_min_luminance(uri: str) -> Optional[float]:
+    if not uri.startswith("data:image/svg+xml;base64,"):
+        return None
+    try:
+        svg = base64.b64decode(uri.split(",", 1)[1]).decode("utf-8", errors="ignore")
+    except Exception:
+        return None
+    luminances = [
+        luminance
+        for color in _SVG_PAINT.findall(svg)
+        if (luminance := _relative_luminance(color)) is not None
+    ]
+    return min(luminances) if luminances else None
+
+
+def _plate_color(uri: str, theme: str) -> Optional[str]:
+    min_luminance = _svg_min_luminance(uri)
+    light_icon = min_luminance is not None and min_luminance > 0.6
+    if theme == "dark":
+        return DARK_PLATE if light_icon else LOGO_PLATE
+    return DARK_PLATE if light_icon else None
+
 
 CLOUD_PRESETS = {
     "web": {
@@ -31,7 +98,8 @@ def transform_wordcloud(
     height: Optional[int] = None,
     min_size: Optional[int] = None,
     max_size: Optional[int] = None,
-    bg_color: str = "#1a1b26",
+    bg_color: Optional[str] = None,
+    theme: Optional[str] = None,
     max_logos: Optional[int] = None,
     padding: Optional[int] = None,
 ) -> str:
@@ -48,16 +116,26 @@ def transform_wordcloud(
     eff_max_size = max_size if max_size is not None else cfg["max_size"]
     eff_padding = padding if padding is not None else cfg["padding"]
     eff_max_logos = max_logos if max_logos is not None else cfg["max_logos"]
+    theme_value = theme.strip().lower() if isinstance(theme, str) else None
+    resolved_theme = theme_value if theme_value in ("dark", "light") else (
+        "light" if bg_color and _is_light_color(bg_color) else "dark"
+    )
+    eff_bg_color = bg_color or (DEFAULT_LIGHT_BG if resolved_theme == "light" else DEFAULT_DARK_BG)
+
+    empty_svg = (
+        f'<svg width="{eff_width}" height="{eff_height}" viewBox="0 0 {eff_width} {eff_height}" xmlns="http://www.w3.org/2000/svg">'
+        f'<rect width="{eff_width}" height="{eff_height}" rx="16" fill="{eff_bg_color}" /></svg>'
+    )
 
     if not badge_dic:
-        return f'<svg width="{eff_width}" height="{eff_height}" viewBox="0 0 {eff_width} {eff_height}" xmlns="http://www.w3.org/2000/svg"/>'
+        return empty_svg
 
     items = list(badge_dic.items()) if hasattr(badge_dic, "items") else list(badge_dic)
     # Take up to max_logos, sorted descending by frequency
     sorted_items = sorted(items, key=lambda x: x[2], reverse=True)[:eff_max_logos]
 
     if not sorted_items:
-        return f'<svg width="{eff_width}" height="{eff_height}" viewBox="0 0 {eff_width} {eff_height}" xmlns="http://www.w3.org/2000/svg"/>'
+        return empty_svg
 
     max_c = max(count for _, _, count in sorted_items)
     min_c = min(count for _, _, count in sorted_items)
@@ -106,8 +184,20 @@ def transform_wordcloud(
                 text_x = pill_x + pill_w / 2
                 text_y = pill_y + 15
 
+                plate = ""
+                plate_color = _plate_color(uri, resolved_theme)
+                if plate_color:
+                    pad = max(2.0, size * 0.06)
+                    radius = max(6.0, size * 0.16)
+                    plate = (
+                        f'  <rect class="logo-plate" x="{cx - pad:.1f}" y="{cy - pad:.1f}" '
+                        f'width="{size + pad * 2:.1f}" height="{size + pad * 2:.1f}" '
+                        f'rx="{radius:.1f}" fill="{plate_color}" />\n'
+                    )
+
                 svg_elements.append(
                     f'<g class="logo-item">\n'
+                    f'{plate}'
                     f'  <image href="{uri}" x="{cx:.1f}" y="{cy:.1f}" width="{size}" height="{size}" style="border-radius: 8px;" />\n'
                     f'  <g class="logo-tooltip">\n'
                     f'    <rect x="{pill_x:.1f}" y="{pill_y:.1f}" width="{pill_w}" height="22" rx="6" fill="#0f172a" stroke="#38bdf8" stroke-width="1.2" />\n'
@@ -136,7 +226,8 @@ def transform_wordcloud(
     return (
         f'<svg width="{eff_width}" height="{eff_height}" viewBox="0 0 {eff_width} {eff_height}" '
         f'xmlns="http://www.w3.org/2000/svg" '
-        f'style="background-color: {bg_color}; border-radius: 16px; display: block; margin: auto; max-width: 100%; height: auto;">\n'
+        f'style="display: block; margin: auto; max-width: 100%; height: auto;">\n'
+        f'  <rect width="{eff_width}" height="{eff_height}" rx="16" fill="{eff_bg_color}" />\n'
         f'{style_block}'
         f'  {"".join(svg_elements)}\n'
         f'</svg>'

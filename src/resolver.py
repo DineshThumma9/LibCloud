@@ -56,7 +56,7 @@ class ImageResolver:
         self.processor = ImageProcessor()
 
         # Resolution strategies
-        self.db_cache = DBCache(cache=self.cache)
+        self.db_cache = DBCache(cache=self.cache, processor=self.processor)
         self.iconlib = IconLib(self.client, self.processor, self.url_cache)
         self.registry = RegistryStrategy(self.client, self.processor, self.url_cache)
         self.github = HeuristicStrategy(self.client, self.processor, github_token, self.url_cache, self.ghc)
@@ -86,6 +86,7 @@ class ImageResolver:
                 res_h = await self.github.resolve(owner, repo, pkg_name)
                 if res_h:
                     return res_h
+                return await self.github.resolve_avatar(owner, pkg_name)
             return None
 
         # Direct Go module repository probe
