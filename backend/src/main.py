@@ -1,11 +1,16 @@
+from httpx import head
+from events import stream_events
+from fastapi.responses import StreamingResponse
+from jobs import JobManager
 import logging
 from typing import Optional
 from fastapi import FastAPI, Response, Query
-from api import fetch_all_repos_deps
 from resolver import ImageResolver
 from utils import transform_wordcloud
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
+from fastapi.requests import Request 
+import asyncio
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,11 +35,44 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+from api import GraphGithubAPI
 
+
+
+
+async def run_pipeline(job_manager:JobManager,username:str,token:str=None):
+    try:
+        await job_manager.emit("job.accepted",{
+            "username":username,
+             "params":"",
+             "job_taken":job_manager.job_id
+        })
+
+        api = GraphGithubAPI(username=username,token=token,job_manager=job_manager)
+        pkg_dic = await api.fetch_all_repos_deps()
+
+
+        async with ImageResolver(github_token=token,job_manager=job_manager) as resolver:
+            await resolver.resolve(pkg_dic)
+
+        await job_manager.emit("done",{
+            "job_id":job_manager.job_id,
+            "scene_url":"",
+            "stats":""
+        })
+    except Exception as e:
+        await job_manager.emit("error",{
+            "phase":"pipeline",
+            "message":str(e),
+            "retryable":"true"
+        })
+        
 
 @app.get("/framecloud")
 async def framecloud(
     username: str,
+    request:Request,
+
     token: Optional[str] = None,
     preset: str = Query("web", description="Preset mode: 'web' (max space, 1400x900) or 'readme' (standard GitHub card, 920x540)"),
     width: Optional[int] = Query(None, description="Custom canvas width in pixels"),
@@ -46,20 +84,19 @@ async def framecloud(
     bg_color: Optional[str] = Query(None, description="Background hex color (defaults based on theme)"),
     theme: Optional[str] = Query(None, description="Theme: 'dark' (light logo plates) or 'light' (original logos)"),
 ):
+
+
+    job_manager = JobManager()
     
-    pkg_dic = await fetch_all_repos_deps(username, token)
-    async with ImageResolver(github_token=token) as resolver:
-        badge_dic = await resolver.resolve(pkg_dic)
-    svg_content = transform_wordcloud(
-        badge_dic,
-        preset=preset,
-        width=width,
-        height=height,
-        min_size=min_size,
-        max_size=max_size,
-        padding=padding,
-        max_logos=max_logos,
-        bg_color=bg_color,
-        theme=theme,
+    job_tsk = asyncio.create_task(run_pipeline(job_manager,username,token))
+    
+    return StreamingResponse(
+        stream_events(job_manager.queue,job_tsk,request),
+        headers = {
+            "Cache-Control":"no-cache",
+            "Connection":"keep-alive",
+            "X-Accel-Buffering":"no"
+        },
+
+        media_type="text/event-stream"
     )
-    return Response(content=svg_content, media_type="image/svg+xml")

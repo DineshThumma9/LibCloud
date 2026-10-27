@@ -1,5 +1,5 @@
 .env
-test.py 
+backend/src/test.py 
 src/__pycache__
 */__pycache__
 */output.svg

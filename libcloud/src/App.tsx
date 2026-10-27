@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
-import { ArrowDownWideNarrow, Palette, Share2, Hash } from 'lucide-react'
+import { ArrowDownWideNarrow, Palette, Share2, Hash, Icon } from 'lucide-react'
 
 export function GithubIcon({ className = "w-4 h-4 text-black" }: { className?: string }) {
   return (
@@ -12,6 +12,130 @@ export function GithubIcon({ className = "w-4 h-4 text-black" }: { className?: s
       />
     </svg>
   );
+}
+import z from 'zod';
+
+
+
+const Event = z.object({
+    job_id:z.string(),
+    type:z.string(),
+    ts:z.float64(),
+    seq:z.float32(),
+    data:z.ZodObject();  
+})
+
+const JobAccepted = z.object({
+  username:z.string(),
+  params:z.string(),
+  job_taken:z.string(),
+
+})
+
+
+const RepoAccepted = z.object({
+  page:z.number(),
+  count:z.number(),
+  total_so_far:z.number()
+})
+
+const RepoListed = z.object({
+  total:z.number() 
+})
+
+const RepoScanStart = z.object({
+    repo:z.string(),
+    index:z.number(),
+    total:z.number()
+})
+
+const RepoScanDone = z.object({
+
+})
+
+
+
+
+const IconAttempted = Event.extend({
+    slug:z.string(), 
+    name:z.string(), 
+    strategy:z.string(),
+    candidate:z.string().optional(),
+    result:z.string().optional(),
+    reason:z.string().optional(),
+
+})
+
+
+const IconResolved = Event.extend({
+    slug:z.string(), 
+    id:z.string(), 
+    name:z.string(), 
+    method:z.string(), 
+    source:z.string(), 
+    icon:z.string(), 
+    icon_meta:z.string(), 
+
+})
+
+const  PackageFound = Event.extend({
+    repo:z.string(), 
+    packages:z.object(),
+    new_slugs:z.number(), 
+    total_unknown:z.number(), 
+
+})
+
+const  IconFailed = Event.extend({
+    slug:z.string(), 
+    name:z.string(), 
+    tried:z.string(), 
+    reason:z.string(), 
+})
+
+const  Progress = Event.extend({
+    phase:z.string(), 
+    done:z.number(),
+    total:z.number()
+})
+
+const Warning = Event.extend({
+    code:z.string(), 
+    message:z.string(), 
+    repo:z.string(),
+})
+
+const  Done = Event.extend({
+    job_id:z.string(), 
+    scene_url:z.string(), 
+    stats:z.string(), 
+})
+
+const Error = Event.extend({
+    phase:z.string(),
+    message:z.string(),
+    retryable:z.string()
+})
+
+const Package = Event.extend({
+
+})
+
+
+
+const eventsLookUp = {
+  "job.accepted":JobAccepted,
+"repos.page":RepoAccepted,
+"repos.listed":RepoListed,
+"repo.scan.start":RepoScanStart,
+"repo.scan.done":RepoScanDone,
+"packages.found":Package,
+"icon.attempt":IconAttempted,
+ "icon.resolved":IconResolved, 
+  "icon.failed":IconFailed,
+"progress":Progress,
+"done":Done, 
+ "error":Error
 }
 
 function App() {
@@ -26,6 +150,8 @@ function App() {
   const [openOrder, setOpenOrder] = useState<boolean>(false);
   const [openTheme, setOpenTheme] = useState<boolean>(false);
   const [openShare, setOpenShare] = useState<boolean>(false);
+  const [statusText,setStatusText] = useState<string>("");
+
 
   const orderOptions = [
     { label: "Max frequency", value: "max-frequency" },
@@ -57,7 +183,30 @@ function App() {
       return;
     }
     setClickGenerate(true);
-  };
+  };  
+
+
+
+  useEffect(() => {
+    
+    const es = EventSource(import.meta.env.BASE_URL);
+    const schema = eventsLookUp[es.type]
+    const eventKeys = Object.keys(eventsLookUp);
+    es.on(eventsLookUp.filter(e) == e.type,(e) => {
+      const data = schema.safeParse(e.data);
+      if(!data.success){
+        setStatusText("Failed");
+      }
+      const status = data.data;
+      const {type,seq,job_id,data} = status;
+      setStatusText(`In step:${seq} curr:status${status} and data:${data}`)      
+
+    })
+
+
+
+  },[])
+
 
   return (
     <>
