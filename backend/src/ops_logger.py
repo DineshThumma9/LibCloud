@@ -22,10 +22,10 @@ class DepOpsLogger:
 
     def __init__(   
         self,
-        output_path: str = "output.csv",
-        resolve_metrics_path: str = "resolution_metrics.csv",
-        validate_failures_path: str = "validation_failures.csv",
-        failed_icons_path: str = "failed_icons.csv"
+        output_path: str = "output/output.csv",
+        resolve_metrics_path: str = "output/resolution_metrics.csv",
+        validate_failures_path: str = "output/validation_failures.csv",
+        failed_icons_path: str = "output/failed_icons.csv"
     ):
         self.output_path: str = output_path
         self.resolve_metrics_path = resolve_metrics_path

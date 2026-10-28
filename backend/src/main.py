@@ -35,6 +35,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from apis import router as api_router
+app.include_router(api_router)
+
 from api import GraphGithubAPI
 
 
@@ -68,8 +72,10 @@ async def run_pipeline(job_manager:JobManager,username:str,token:str=None):
         })
         
 
-@app.get("/framecloud")
-async def framecloud(
+@app.api_route("/framecloud/stream", methods=["GET", "POST"])
+@app.api_route("/framecloud", methods=["GET", "POST"])
+@app.api_route("/libcloud", methods=["GET", "POST"])
+async def libcloud(
     username: str,
     request:Request,
 

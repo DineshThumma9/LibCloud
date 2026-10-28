@@ -4,7 +4,7 @@ from client import GraphGithubClient
 from collections import defaultdict
 import asyncio
 import tempfile
-from constants import TARGETS
+from constants import SLUG_MAP, TARGETS
 from queries import REPO_DEP_QUERY, REPOS_QUERY
 from parser import DependencyParser
 from models import PKGInfo, merge_pkg_dicts
@@ -31,7 +31,7 @@ class GraphGithubAPI:
         self.token = token or os.environ.get("GITHUB_TOKEN")
         self.allow_fork = allow_fork 
         self.username = username
-        self.ghc = GraphGithubClient(token=token)
+        self.ghc = GraphGithubClient(token=self.token)
         self.dep_db = DepsDB()
         self.parser = DependencyParser()
         self.job_manager = job_manager 
@@ -61,6 +61,23 @@ class GraphGithubAPI:
             log.info("  │    %-50s → %d package(s)", str(file_path.relative_to(root)), extracted)
         except Exception as e:
             log.warning("  │    failed to parse %s: %s", file_path, e)
+
+    async def _emit_packages(self, repo: str, packages: dict[str, PKGInfo]):
+        if not packages or not self.job_manager:
+            return
+        package_list = [
+            {
+                "slug": SLUG_MAP.get(norm, norm).lower(),
+                "name": norm,
+                "count": pkg.count,
+                "dep_origin": pkg.dep_origin,
+            }
+            for norm, pkg in packages.items()
+        ]
+        await self.job_manager.emit("package.found", {
+            "repo": repo,
+            "packages": package_list,
+        })
 
 
 
@@ -109,17 +126,19 @@ class GraphGithubAPI:
             total_so_far += len(nodes)
             count += len(nodes)
             total_repos = len(nodes)*50
-            await self.job_manager.emit("repo.page", {
-                "page": page,
-                "count": len(nodes),
-                "total_so_far": total_so_far,
-                "total_repos": total_repos
-            })
+            if self.job_manager:
+                await self.job_manager.emit("repo.page", {
+                    "page": page,
+                    "count": len(nodes),
+                    "total_so_far": total_so_far,
+                    "total_repos": total_repos
+                })
 
         log.info("Found %d repos for %s", len(all_repos), self.username)
-        await self.job_manager.emit("repo.listed",{
-            "total":len(all_repos)
-        })
+        if self.job_manager:
+            await self.job_manager.emit("repo.listed",{
+                "total":len(all_repos)
+            })
         return all_repos
 
 
@@ -128,10 +147,11 @@ class GraphGithubAPI:
         
         start = time.time() 
 
-        await self.job_manager.emit("repo.scan.start",{
-            "username":self.username,
-            "repo":repo
-        })
+        if self.job_manager:
+            await self.job_manager.emit("repo.scan.start",{
+                "username":self.username,
+                "repo":repo
+            })
         res = await self.dep_db.get_repo_deps(username=self.username, repo=repo, repo_sha=repo_sha)
         if res:
             pkg_dic = defaultdict(PKGInfo)
@@ -145,13 +165,15 @@ class GraphGithubAPI:
                 else:
                     pkg_dic[norm] = data
             log.info("  ⚡ [Cache HIT: Repo] %s/%s (%d packages restored — scan skipped)", self.username, repo, len(pkg_dic))
-            await self.job_manager.emit("repo.scan.done",{
-                "repo":repo,
-                "index":index,
-                "cache_hit":True,
-                 "ms":time.time()-start,
-                 "package_count":len(pkg_dic),
-            })
+            await self._emit_packages(repo, pkg_dic)
+            if self.job_manager:
+                await self.job_manager.emit("repo.scan.done",{
+                    "repo":repo,
+                    "index":index,
+                    "cache_hit":True,
+                    "ms":time.time()-start,
+                    "package_count":len(pkg_dic),
+                })
             return pkg_dic 
 
         pkg_dic = defaultdict(PKGInfo)
@@ -180,6 +202,7 @@ class GraphGithubAPI:
 
         if manifests:
             log.info("  │  path: GitHub dependency graph API (%d manifest(s))", len(manifests))
+            announced_slugs: set[str] = set()
             for manifest in manifests:
                 raw_fname = manifest["filename"]
                 fname = Path(raw_fname).name
@@ -188,6 +211,7 @@ class GraphGithubAPI:
                     continue
 
                 before = len(pkg_dic)
+                manifest_pkgs: dict[str, PKGInfo] = {}
                 for dep in manifest["dependencies"]["nodes"]:
                     raw_dep = dep["packageName"]
                     norm_dep, lang = self.parser.normalize_pkg(raw_dep, raw_fname)
@@ -196,23 +220,38 @@ class GraphGithubAPI:
                         pkg.count += 1
                         pkg.dep_origin = lang
                         pkg.raw_names.add(raw_dep)
-                        pkg_lists = [{"slug":norm,"count":p.count,"dep_origin":p.dep_origin} for norm,p in pkg_dic.items()]
-                        await self.job_manager.emit("package.found",{
-                            "repo":repo,
-                            "packages":pkg_lists
-                        })
+
+                        delta = manifest_pkgs.get(norm_dep)
+                        if delta is None:
+                            manifest_pkgs[norm_dep] = PKGInfo(
+                                count=1, dep_origin=lang, raw_names={raw_dep}
+                            )
+                        else:
+                            delta.count += 1
+                            delta.dep_origin = lang
+                            delta.raw_names.add(raw_dep)
+
+                if manifest_pkgs and self.job_manager:
+                    await self._emit_packages(repo, manifest_pkgs)
+                    announced_slugs.update(manifest_pkgs)
 
                 extracted = len(pkg_dic) - before
                 log.info("  │  %-30s → %d package(s) extracted", fname, extracted)
             if pkg_dic:
                 log.info("  └─ total: %d unique packages", len(pkg_dic))
-                await self.job_manager.emit("repo.scan.done",{
-                    "repo":repo,
-                    "index":index,
-                    "cache_hit":False,
-                    "ms":time.time()-start,
-                    "package_count":len(pkg_dic),
-                })
+                remaining = {
+                    norm: pkg for norm, pkg in pkg_dic.items()
+                    if norm not in announced_slugs
+                }
+                await self._emit_packages(repo, remaining)
+                if self.job_manager:
+                    await self.job_manager.emit("repo.scan.done",{
+                        "repo":repo,
+                        "index":index,
+                        "cache_hit":False,
+                        "ms":time.time()-start,
+                        "package_count":len(pkg_dic),
+                    })
                 return pkg_dic
 
         log.info("  │  path: git-clone fallback (no dependency graph)")
@@ -236,6 +275,15 @@ class GraphGithubAPI:
                     proc.kill()
                     await proc.wait()
                     log.warning("  │  git clone timed out for %s/%s — skipping clone", self.username, repo)
+                    await self._emit_packages(repo, pkg_dic)
+                    if self.job_manager:
+                        await self.job_manager.emit("repo.scan.done",{
+                            "repo":repo,
+                            "index":index,
+                            "cache_hit":False,
+                            "ms":time.time()-start,
+                            "package_count":len(pkg_dic),
+                        })
                     return pkg_dic
                 log.info("  │  clone done, scanning for: %s", TARGETS)
 
@@ -270,6 +318,15 @@ class GraphGithubAPI:
             except Exception as e:
                 log.error("  │  clone failed for %s/%s: %s", self.username, repo, e)
 
+        await self._emit_packages(repo, pkg_dic)
+        if self.job_manager:
+            await self.job_manager.emit("repo.scan.done",{
+                "repo":repo,
+                "index":index,
+                "cache_hit":False,
+                "ms":time.time()-start,
+                "package_count":len(pkg_dic),
+            })
         await self.dep_db.save_repo_deps(username=self.username, repo=repo, repo_sha=repo_sha, pkg_dic=pkg_dic)
         log.info("  └─ total: %d unique packages", len(pkg_dic))
         return pkg_dic

@@ -6,11 +6,12 @@ from asyncio import QueueEmpty
 from pydantic import Field
 from pydantic import BaseModel
 from fastapi.sse import EventSourceResponse,ServerSentEvent
-from typing import Any, Union
+from typing import Any
 from fastapi.requests import Request
 from typing import List ,Optional
 import asyncio 
 from asyncio import Task,Queue
+import time
 
 
 
@@ -54,7 +55,6 @@ class IconAttempted(BaseModel):
 class IconResolved(BaseModel):                                                                                                                                             
     slug: str                                                                                                                                                              
     name: str                                                                                                                                                              
-    stragey: Optional[str] = None                                                                                                                                          
     strategy: Optional[str] = None                                                                                                                                         
     id: Optional[str] = ""                                                                                                                                                 
     method: Optional[str] = ""                                                                                                                                             
@@ -102,7 +102,7 @@ class Event(BaseModel):
     type:str
     ts:float 
     seq:int 
-    data:Union[JobAccepted,RepoPage,RepoListed,RepoScanStart,RepoScanDone,PackageFound,IconAttempted,IconResolved,IconFailed,Progress,Done,Error,dict[str,Any]]
+    data:Any
 
 
 async def stream_events(queue:Queue,job_task:Task,request:Request):
@@ -119,7 +119,7 @@ async def stream_events(queue:Queue,job_task:Task,request:Request):
             
             event = await queue.get()
 
-            yield f"data: {event.model_dump()}\n\n"
+            yield f"data: {event.model_dump_json()}\n\n"
 
             
             if event.type and event.type in ("done","error"):
@@ -127,13 +127,9 @@ async def stream_events(queue:Queue,job_task:Task,request:Request):
             
 
     except Exception as e:
-        yield f"data: {Error(
-            phase="stream_error",
-            message=str(e),
-            retryable="false"
-        )}\n\n"
+        yield f"data: {Event(job_id='', type='error', ts=time.time(), seq=0, data=Error(phase='stream_error', message=str(e), retryable='false')).model_dump_json()}\n\n"
     finally:
-        pass 
+        job_task.cancel()
 
 
 

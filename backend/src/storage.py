@@ -2,12 +2,14 @@ import logging
 from typing import Optional
 from motor.motor_asyncio import AsyncIOMotorClient
 from config import settings
+import uuid 
 
 log = logging.getLogger(__name__)
 
 
 class DepsDB:
     _shared_client: Optional[AsyncIOMotorClient] = None
+    MAX_MEM_SHARES = 200
 
     def __init__(self, uri: Optional[str] = None, db_name: Optional[str] = None):
         mongo_uri = uri or settings.get_mongo_uri()
@@ -23,9 +25,11 @@ class DepsDB:
         self.db = self.db_client[target_db]
         self.repo = self.db["repos"]
         self.icons = self.db["icons"]
+        self.shares = self.db["shares"]
         self._mem_icons: dict[str, str] = {}
         self._mem_urls: dict[str, str] = {}
         self._mem_repos: dict[str, dict] = {}
+        self._mem_shares: dict[str, dict] = {}
         self._db_warned = False
 
     def _warn_db(self, err: Exception):
@@ -125,3 +129,56 @@ class DepsDB:
         except Exception as e:
             self._warn_db(e)
         return pkg_dic
+    
+    def _remember_share(self, share_id: str, doc: dict) -> dict:
+        """Store a share in the bounded in-memory LRU cache."""
+        self._mem_shares.pop(share_id, None)
+        self._mem_shares[share_id] = doc
+        while len(self._mem_shares) > self.MAX_MEM_SHARES:
+            self._mem_shares.pop(next(iter(self._mem_shares)), None)
+        return doc
+
+    async def create_share(self, username: str, base64: str, svg_data: str, share_id: str):
+        doc = {
+            "username": username,
+            "png_base64": base64,
+            "share_id": share_id,
+            "svg_data": svg_data
+        }
+        self._remember_share(share_id, doc)
+        try:
+            await self.shares.update_one(
+                {"share_id": share_id},
+                {"$set": doc},
+                upsert=True
+            )
+        except Exception as e:
+            self._warn_db(e)
+        return share_id
+
+    async def fetch_png(self, share_id: str):
+        if share_id in self._mem_shares:
+            return self._remember_share(share_id, self._mem_shares[share_id]).get("png_base64")
+        try:
+            obj = await self.shares.find_one({"share_id": share_id})
+            if obj:
+                self._remember_share(share_id, obj)
+                return obj.get("png_base64")
+        except Exception as e:
+            self._warn_db(e)
+        return None
+
+    async def fetch_svg(self, share_id: str):
+        if share_id in self._mem_shares:
+            return self._remember_share(share_id, self._mem_shares[share_id]).get("svg_data")
+        try:
+            obj = await self.shares.find_one({"share_id": share_id})
+            if obj:
+                self._remember_share(share_id, obj)
+                return obj.get("svg_data")
+        except Exception as e:
+            self._warn_db(e)
+        return None
+        
+
+

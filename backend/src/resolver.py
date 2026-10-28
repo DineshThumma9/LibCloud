@@ -78,11 +78,15 @@ class ImageResolver:
         slug = SLUG_MAP.get(norm_name, norm_name).lower()
         cached = await self.db_cache.resolve(slug)
         if cached:
-            await self.job_manager.emit("icon.resolved",{
-                "slug":slug,
-                "stragey":"cached",
-                "name":norm_name 
-            })
+            if self.job_manager:
+                await self.job_manager.emit("icon.resolved",{
+                    "slug":slug,
+                    "strategy":"cached",
+                    "method":cached[1],
+                    "icon":cached[0],
+                    "source":cached[2] or "",
+                    "name":norm_name 
+                })
             return cached
 
         # Direct GitHub Actions repository probe
@@ -93,20 +97,29 @@ class ImageResolver:
                 repo = parts[1].split("@")[0]
                 res_h = await self.github.resolve(owner, repo, pkg_name)
                 if res_h:
-                    await self.job_manager.emit("icon.resolved",{
-                        "slug":slug,
-                        "stragey":"gitub",
-                        "name":norm_name 
-                    })
+                    if self.job_manager:
+                        await self.job_manager.emit("icon.resolved",{
+                            "slug":slug,
+                            "strategy":"github",
+                            "method":res_h[1],
+                            "icon":res_h[0],
+                            "source":res_h[2] or "",
+                            "name":norm_name 
+                        })
                     return res_h
                 
-                avater = await self.github.resolve_avatar(owner,pkg_name)
-                if avater:
-                    await self.job_manager.emit("icon.resolved",{
-                        "slug":slug,
-                        "stragey":"gitub_avatar",
-                        "name":norm_name 
-                    })
+                avatar = await self.github.resolve_avatar(owner, pkg_name)
+                if avatar:
+                    if self.job_manager:
+                        await self.job_manager.emit("icon.resolved",{
+                            "slug":slug,
+                            "strategy":"github_avatar",
+                            "method":avatar[1],
+                            "icon":avatar[0],
+                            "source":avatar[2] or "",
+                            "name":norm_name 
+                        })
+                    return avatar
             return None
 
         # Direct Go module repository probe
@@ -117,11 +130,15 @@ class ImageResolver:
                     owner, repo = parts[1], parts[2]
                     res_h = await self.github.resolve(owner, repo, pkg_name)
                     if res_h:
-                        await self.job_manager.emit("icon.resolved",{
-                        "slug":slug,
-                        "stragey":"github",
-                        "name":norm_name 
-                        })
+                        if self.job_manager:
+                            await self.job_manager.emit("icon.resolved",{
+                                "slug":slug,
+                                "strategy":"github",
+                                "method":res_h[1],
+                                "icon":res_h[0],
+                                "source":res_h[2] or "",
+                                "name":norm_name 
+                            })
                         return res_h
             elif "/" in pkg_name:
                 parts = [p for p in pkg_name.split("/") if p]
@@ -129,11 +146,15 @@ class ImageResolver:
                 if domain not in HOSTING_BLOCKLIST and "." in domain:
                     res_fav = await self.favicon.resolve_domain(domain, pkg_name)
                     if res_fav:
-                        await self.job_manager.emit("icon.resolved",{
-                        "slug":slug,
-                        "stragey":"favicon",
-                        "name":norm_name 
-                        })
+                        if self.job_manager:
+                            await self.job_manager.emit("icon.resolved",{
+                                "slug":slug,
+                                "strategy":"favicon",
+                                "method":res_fav[1],
+                                "icon":res_fav[0],
+                                "source":res_fav[2] or "",
+                                "name":norm_name 
+                            })
                         return res_fav
 
         # Registry lookup (PyPI, npm, Maven, Cargo, RubyGems)
@@ -156,49 +177,63 @@ class ImageResolver:
             if links.github_owner and links.github_repo:
                 res_h = await self.github.resolve(links.github_owner, links.github_repo, pkg_name)
                 if res_h:
-                    await self.job_manager.emit("icon.resolved",{
-                        "slug":slug,
-                        "stragey":"gitub",
-                        "name":norm_name 
-                    })
+                    if self.job_manager:
+                        await self.job_manager.emit("icon.resolved",{
+                            "slug":slug,
+                            "strategy":"github",
+                            "method":res_h[1],
+                            "icon":res_h[0],
+                            "source":res_h[2] or "",
+                            "name":norm_name 
+                        })
                     return res_h
 
             # 2. Custom domain favicon fallback
             if links.custom_domain:
                 res_fav = await self.favicon.resolve_domain(links.custom_domain, pkg_name)
                 if res_fav:
-                    await self.job_manager.emit("icon.resolved",{
-                        "slug":slug,
-                        "stragey":"gitub",
-                        "name":norm_name 
-                    })                    
+                    if self.job_manager:
+                        await self.job_manager.emit("icon.resolved",{
+                            "slug":slug,
+                            "strategy":"favicon",
+                            "method":res_fav[1],
+                            "icon":res_fav[0],
+                            "source":res_fav[2] or "",
+                            "name":norm_name 
+                        })                    
                     return res_fav
 
             # 3. GitHub organization avatar
             if links.github_owner:
                 res_av = await self.github.resolve_avatar(links.github_owner, pkg_name)
                 if res_av:
-                    await self.job_manager.emit("icon.resolved",{
-                        "slug":slug,
-                        "stragey":"gitub",
-                        "name":norm_name 
-                    })
+                    if self.job_manager:
+                        await self.job_manager.emit("icon.resolved",{
+                            "slug":slug,
+                            "strategy":"github_avatar",
+                            "method":res_av[1],
+                            "icon":res_av[0],
+                            "source":res_av[2] or "",
+                            "name":norm_name 
+                        })
                     return res_av
 
         except Exception as e:
-            await self.job_manager.emit("icon.failed",{
-                "slug":slug,
-                "name":norm_name ,
-                "reason":str(e)  
-            })  
+            if self.job_manager:
+                await self.job_manager.emit("icon.failed",{
+                    "slug":slug,
+                    "name":norm_name ,
+                    "reason":str(e)  
+                })  
             log.debug("Failed resolving icon links for %r: %s", pkg_name, e)
 
         log.warning("✗ Missing icon for %r — no icon found across all sources", pkg_name)
-        await self.job_manager.emit("icon.failed",{
-            "slug":slug,
-            "name":norm_name ,
-            "reason":"no icon found across all sources"  
-        })  
+        if self.job_manager:
+            await self.job_manager.emit("icon.failed",{
+                "slug":slug,
+                "name":norm_name ,
+                "reason":"no icon found across all sources"  
+            })  
         return None
 
     async def resolve(
@@ -261,6 +296,14 @@ class ImageResolver:
                     self.recovery_stats[method] += 1
                     self.resolved_methods[norm_name] = method
                     self.resolved_urls[norm_name] = cached_url or method
+                    if self.job_manager:
+                        await self.job_manager.emit("icon.resolved", {
+                            "slug": slug,
+                            "name": norm_name,
+                            "strategy": method,
+                            "icon": cached_icon,
+                            "source": cached_url or ""
+                        })
                     return (norm_name, cached_icon, count)
 
                 # 1. Check icon libraries first (Devicon, SimpleIcons, Iconify)
@@ -271,6 +314,14 @@ class ImageResolver:
                     self.resolved_methods[norm_name] = method
                     self.resolved_urls[norm_name] = source_url
                     await self.cache.save_icon(slug, icon, source_url=source_url)
+                    if self.job_manager:
+                        await self.job_manager.emit("icon.resolved", {
+                            "slug": slug,
+                            "name": norm_name,
+                            "strategy": method,
+                            "icon": icon,
+                            "source": source_url
+                        })
                     return (norm_name, icon, count)
 
                 # 2. Fall back to package registry & GitHub heuristic lookup
@@ -286,6 +337,14 @@ class ImageResolver:
                     self.resolved_methods[norm_name] = method
                     self.resolved_urls[norm_name] = source_url
                     await self.cache.save_icon(slug, icon, source_url=source_url)
+                    if self.job_manager:
+                        await self.job_manager.emit("icon.resolved", {
+                            "slug": slug,
+                            "name": norm_name,
+                            "strategy": method,
+                            "icon": icon,
+                            "source": source_url
+                        })
                     return (norm_name, icon, count)
 
                 log.warning("✗ Missing icon for %r — skipped from cloud", norm_name)
@@ -298,6 +357,12 @@ class ImageResolver:
                         "count": count,
                         "slug_tried": slug,
                         "reason": "no_icon_found",
+                    })
+                if self.job_manager:
+                    await self.job_manager.emit("icon.failed", {
+                        "slug": slug,
+                        "name": norm_name,
+                        "reason": "no_icon_found"
                     })
                 return None
 
