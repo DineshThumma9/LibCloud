@@ -1,38 +1,21 @@
-import { z } from 'zod';
-import { readSSEStream, type StreamOptions } from './streaming';
+import { readSSEStream, type StreamOptions } from "./streaming";
 
-export const LibCloudParamsSchema = z.object({
-  username: z.string().min(1, "Username is required"),
-  max_logos: z.number().int().min(1).max(500).optional().default(100),
-  order_by: z.string().optional().default("max-frequency"),
-  preset: z.string().optional().default("web"),
-  theme: z.string().optional().default("Minimal"),
-  bg_color: z.string().optional(),
-  include_forks: z.boolean().optional().default(false),
-  include_private: z.boolean().optional().default(false),
-  token: z.string().optional(),
-});
-export type LibCloudParams = z.input<typeof LibCloudParamsSchema>;
+export type LibCloudParams = {
+  username: string;
+  token?: string;
+};
 
 /**
- * Initiates SSE streaming connection to the backend.
+ * Starts the SSE scan. Display controls are client-side, so only the scan
+ * identity goes to the backend. The token travels in the Authorization header,
+ * never in the URL.
  */
 export async function startLibCloudStream(
   params: LibCloudParams,
   options: StreamOptions = {}
 ): Promise<void> {
-  const query = new URLSearchParams({
-    username: params.username.trim(),
-    max_logos: String(params.max_logos || 100),
-    order_by: params.order_by || "max-frequency",
-  });
-
-  if (params.preset) query.set("preset", params.preset);
-  if (params.theme) query.set("theme", params.theme);
-  if (params.bg_color) query.set("bg_color", params.bg_color);
-  if (params.token) query.set("token", params.token);
-
-  const endpoint = `/framecloud?${query.toString()}`;
+  const query = new URLSearchParams({ username: params.username.trim() });
+  const endpoint = `/framecloud/stream?${query.toString()}`;
 
   const response = await fetch(endpoint, {
     method: "GET",

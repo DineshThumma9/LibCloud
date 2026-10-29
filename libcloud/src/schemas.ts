@@ -4,6 +4,7 @@ export const JobAcceptedSchema = z.object({
   username: z.string().default("user"),
   params: z.string().default(""),
   job_taken: z.string().default(""),
+  run_id: z.string().default(""),
 });
 export type JobAccepted = z.infer<typeof JobAcceptedSchema>;
 
@@ -93,6 +94,7 @@ export const DoneSchema = z.object({
   job_id: z.string().default(""),
   scene_url: z.string().default(""),
   stats: z.any().default(""),
+  run_id: z.string().default(""),
 });
 export type Done = z.infer<typeof DoneSchema>;
 
@@ -100,6 +102,7 @@ export const ErrorEvtSchema = z.object({
   phase: z.string().default("pipeline"),
   message: z.string().default("Unknown error"),
   retryable: z.union([z.string(), z.boolean()]).default(false),
+  run_id: z.string().default(""),
 });
 export type ErrorEvt = z.infer<typeof ErrorEvtSchema>;
 
@@ -157,10 +160,10 @@ export const eventMessages: Record<string, (d: any) => string> = {
   'repo.scan.done': (d: RepoScanDone) => `Scanned ${d.repo} (${d.package_count} packages${d.cache_hit ? ', cached' : ''})`,
   'icon.attempt': (d: IconAttempted) => `Looking up ${d.name || d.slug} via ${d.strategy}...`,
   'icons.attempted': (d: IconAttempted) => `Looking up ${d.name || d.slug} via ${d.strategy}...`,
-  'icon.resolved': (d: IconResolved) => `✓ Resolved icon for ${d.name || d.slug} (${d.strategy || d.method || 'resolved'})`,
-  'icon.failed': (d: IconFailed) => `✗ Missing icon for ${d.name || d.slug}`,
+  'icon.resolved': (d: IconResolved) => `Resolved ${d.name || d.slug} via ${d.strategy || d.method || 'icon lookup'}`,
+  'icon.failed': (d: IconFailed) => `No icon found for ${d.name || d.slug}`,
   'progress': (d: Progress) => `Progress [${d.phase}]: ${d.done}/${d.total}`,
-  'done': (_d: Done) => `✓ Scan complete! Ready to render.`,
+  'done': (_d: Done) => `Scan complete`,
   'error': (d: ErrorEvt) => `Error [${d.phase}]: ${d.message}`,
   'warn': (d: Warning) => `Warning: ${d.message}`,
   'warning': (d: Warning) => `Warning: ${d.message}`,

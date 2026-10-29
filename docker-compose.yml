@@ -1,0 +1,19 @@
+services:
+  backend:
+    build: ./backend
+    container_name: libcloud-backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db 
+
+  db:
+    image: mongo:latest 
+    container_name: mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_vol:/data/db 
+
+volumes:
+  mongodb_vol

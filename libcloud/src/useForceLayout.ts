@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 import gsap from 'gsap';
+import type { PresetLayout, SortId } from './lib/presets';
 import type { Logo } from './schemas';
 
 export interface SimNode extends d3.SimulationNodeDatum {
@@ -14,10 +15,20 @@ export interface SimNode extends d3.SimulationNodeDatum {
 interface ForceLayoutOptions {
   width?: number;
   height?: number;
-  minRadius?: number;
-  maxRadius?: number;
   padding?: number;
+  layout?: PresetLayout;
+  sort?: SortId;
+  onTick?: () => void;
 }
+
+const DEFAULT_LAYOUT: PresetLayout = {
+  charge: -8,
+  xStrength: 0.07,
+  yStrength: 0.07,
+  grid: 0,
+  radial: false,
+  hubBias: false,
+};
 
 /**
  * Pick a radius range that scales down as the cloud grows so every logo
@@ -40,37 +51,42 @@ export function getLogoRadius(
   count: number,
   minCount: number,
   maxCount: number,
-  total: number
+  total: number,
+  sort: SortId = 'most-used'
 ): number {
   const { minRadius, maxRadius } = getRadiusBounds(total);
   if (maxCount === minCount) return (minRadius + maxRadius) / 2;
+
   const normalized = (count - minCount) / (maxCount - minCount);
-  // Exponent > 1 keeps the long tail small and reserves the big marks for
-  // the genuinely dominant packages (same visual rhythm as output.svg).
-  return minRadius + Math.pow(normalized, 1.2) * (maxRadius - minRadius);
+  const weight = sort === 'least-used' ? 1 - normalized : normalized;
+  // Balanced compresses the long tail; the other modes keep a strong
+  // dominant-package rhythm.
+  const exponent = sort === 'balanced' ? 0.55 : 1.2;
+  return minRadius + Math.pow(weight, exponent) * (maxRadius - minRadius);
 }
 
 export function useForceLayout(
   logos: Logo[],
   options: ForceLayoutOptions = {}
 ) {
-  const {
-    width = 1400,
-    height = 850,
-  } = options;
+  const { width = 1400, height = 850 } = options;
+  const layout = options.layout ?? DEFAULT_LAYOUT;
+  const sort = options.sort ?? 'most-used';
   const padding =
     options.padding ??
     Math.max(3, Math.min(8, 1600 / Math.max(logos.length, 1)));
-  const { minRadius, maxRadius } =
-    options.minRadius !== undefined && options.maxRadius !== undefined
-      ? { minRadius: options.minRadius, maxRadius: options.maxRadius }
-      : getRadiusBounds(logos.length);
 
   // Map of logo.id -> DOM <g class="logo-node">
   const nodeRefs = useRef<Map<string, SVGGElement>>(new Map());
   // Persistent simulation nodes so existing nodes preserve x, y, vx, vy
   const simNodesRef = useRef<Map<string, SimNode>>(new Map());
   const simRef = useRef<d3.Simulation<SimNode, undefined> | null>(null);
+  // The canvas uses this to keep decorative edges in sync with the layout.
+  const onTickRef = useRef(options.onTick);
+
+  useEffect(() => {
+    onTickRef.current = options.onTick;
+  });
 
   useEffect(() => {
     if (!logos || logos.length === 0) {
@@ -79,23 +95,28 @@ export function useForceLayout(
       return;
     }
 
-    // 1. Calculate count bounds for radius scaling
     const counts = logos.map((l) => l.count);
     const minC = Math.min(...counts);
     const maxC = Math.max(...counts);
-
-    const getRadius = (count: number) =>
-      getLogoRadius(count, minC, maxC, logos.length);
-
-    // 2. Update existing nodes or create new ones with initial center positions
-    const currentSimNodes = simNodesRef.current;
-    const nextSimNodes: SimNode[] = [];
     const centerX = width / 2;
     const centerY = height / 2;
+    const clampX = (value: number, radius: number) =>
+      Math.max(radius, Math.min(width - radius, value));
+    const clampY = (value: number, radius: number) =>
+      Math.max(radius, Math.min(height - radius, value));
+    const snap = (value: number) =>
+      layout.grid > 0 ? Math.round(value / layout.grid) * layout.grid : value;
+
+    const getRadius = (count: number) =>
+      getLogoRadius(count, minC, maxC, logos.length, sort);
+
+    // 1. Update existing nodes or create new ones with initial center positions
+    const currentSimNodes = simNodesRef.current;
+    const nextSimNodes: SimNode[] = [];
 
     logos.forEach((l, index) => {
       const radius = getRadius(l.count);
-      let existing = currentSimNodes.get(l.id);
+      const existing = currentSimNodes.get(l.id);
 
       if (existing) {
         existing.radius = radius;
@@ -127,39 +148,74 @@ export function useForceLayout(
       }
     }
 
-    // 3. Initialize or update D3 force simulation
+    // 2. Initialize the simulation once, then update its forces when the
+    //    preset or canvas size changes.
     if (!simRef.current) {
-      simRef.current = d3
-        .forceSimulation<SimNode>()
-        .force(
-          'collide',
-          d3.forceCollide<SimNode>((d) => d.radius + padding).strength(0.85)
-        )
-        .force('x', d3.forceX<SimNode>(centerX).strength(0.07))
-        .force('y', d3.forceY<SimNode>(centerY).strength(0.07))
-        .force('charge', d3.forceManyBody<SimNode>().strength(-8))
-        .on('tick', () => {
-          // Direct DOM transform updates — NO React setState inside tick!
-          const domMap = nodeRefs.current;
-          for (const node of currentSimNodes.values()) {
-            const el = domMap.get(node.id);
-            if (el && node.x !== undefined && node.y !== undefined) {
-              // Clamp inside canvas boundary
-              const x = Math.max(node.radius, Math.min(width - node.radius, node.x));
-              const y = Math.max(node.radius, Math.min(height - node.radius, node.y));
-              node.x = x;
-              node.y = y;
-              el.setAttribute('transform', `translate(${x}, ${y})`);
-            }
-          }
-        });
+      simRef.current = d3.forceSimulation<SimNode>();
     }
 
     const sim = simRef.current;
+    // Re-register each run so snapping and bounds follow the current preset.
+    sim.on('tick', () => {
+      // Direct DOM transform updates — NO React setState inside tick!
+      const domMap = nodeRefs.current;
+      // Snap only once the cloud has cooled, otherwise collision forces fight
+      // the grid every frame and the layout never settles.
+      const shouldSnap = layout.grid > 0 && sim.alpha() < 0.12;
+      for (const node of currentSimNodes.values()) {
+        const el = domMap.get(node.id);
+        if (el && node.x !== undefined && node.y !== undefined) {
+          const x = shouldSnap ? snap(node.x) : node.x;
+          const y = shouldSnap ? snap(node.y) : node.y;
+          node.x = clampX(x, node.radius);
+          node.y = clampY(y, node.radius);
+          el.setAttribute('transform', `translate(${node.x}, ${node.y})`);
+        }
+      }
+      onTickRef.current?.();
+    });
+    const normalizedCount = (node: SimNode) =>
+      maxC === minC ? 0.5 : (node.count - minC) / (maxC - minC);
+
+    sim
+      .force(
+        'charge',
+        d3
+          .forceManyBody<SimNode>()
+          .strength((node) =>
+            layout.hubBias
+              ? layout.charge - normalizedCount(node) * 24
+              : layout.charge
+          )
+      )
+      .force('x', d3.forceX<SimNode>(centerX).strength(layout.xStrength))
+      .force('y', d3.forceY<SimNode>(centerY).strength(layout.yStrength))
+      .force(
+        'collide',
+        d3.forceCollide<SimNode>((d) => d.radius + padding).strength(0.85)
+      );
+
+    if (layout.radial) {
+      const inner = Math.min(width, height) * 0.18;
+      const outer = Math.min(width, height) * 0.42;
+      sim.force(
+        'radial',
+        d3
+          .forceRadial<SimNode>(
+            (node) => inner + (1 - normalizedCount(node)) * (outer - inner),
+            centerX,
+            centerY
+          )
+          .strength(0.4)
+      );
+    } else {
+      sim.force('radial', null);
+    }
+
     sim.nodes(nextSimNodes);
     sim.alpha(0.35).restart();
 
-    // 4. Attach interactive dragging behavior with D3 & GSAP lift
+    // 3. Attach interactive dragging behavior with D3 & GSAP lift
     for (const [id, el] of nodeRefs.current.entries()) {
       const node = currentSimNodes.get(id);
       if (!node) continue;
@@ -202,13 +258,14 @@ export function useForceLayout(
           }
         });
 
+      d3.select(el).on(".drag", null);
       d3.select(el).call(dragBehavior);
     }
 
     return () => {
       sim.stop();
     };
-  }, [logos, width, height, minRadius, maxRadius, padding]);
+  }, [logos, width, height, layout, sort, padding]);
 
   // Register a DOM node ref
   const setNodeRef = (id: string, el: SVGGElement | null) => {
@@ -254,6 +311,7 @@ export function useForceLayout(
             }
           });
 
+        d3.select(el).on(".drag", null);
         d3.select(el).call(dragBehavior);
       }
     } else {

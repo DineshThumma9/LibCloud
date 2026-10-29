@@ -1,5 +1,5 @@
 .env
-backend/src/test.py 
+backend/scripts/__pycache__
 src/__pycache__
 */__pycache__
 */output.svg
@@ -22,5 +22,6 @@ libcloud/dist/
 report.md 
 **/__pycache__/**
 *.pyc
-*/src/strategies/__pycache__/*
-backend/src/output
+backend/app/output
+backend/output
+backend/data/
