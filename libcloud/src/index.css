@@ -12,14 +12,16 @@
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
+/* Mirrors the default "paper" preset for first paint before React applies
+   the selected preset's inline variables. */
 :root {
-  --canvas: #0c0d0f;
-  --surface: #14161a;
-  --line: #262a31;
-  --ink: #e7e5e4;
-  --muted: #8b8f98;
-  --accent: #d7ff3f;
-  --accent-ink: #11130a;
+  --canvas: #f7f3ea;
+  --surface: #fffdf7;
+  --line: #d8d2c4;
+  --ink: #1c1917;
+  --muted: #78716c;
+  --accent: #c2410c;
+  --accent-ink: #fff7ed;
 }
 
 html,

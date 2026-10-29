@@ -1,7 +1,7 @@
 import logging
 import re
 from typing import Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 from app.sources.base import BaseStrategy
 
@@ -94,34 +94,4 @@ class FaviconStrategy(BaseStrategy):
         if icon:
             log.info("✓ Icon hit for %r via website favicon (%s)", pkg_name or domain, domain)
             return icon, "homepage_favicon", fav_url
-        return None
-
-    async def resolve_homepage(self, homepage: str, repo: str = "", pkg_name: str = "") -> Optional[tuple[str, str, str]]:
-        if not homepage:
-            return None
-
-        clean_repo = repo.lower().replace("-", "").replace("_", "") if repo else ""
-        candidate_urls = []
-        if repo:
-            candidate_urls.extend([
-                urljoin(homepage, f"/img/{repo}.svg"),
-                urljoin(homepage, f"/img/{clean_repo}.svg"),
-            ])
-        candidate_urls.extend([
-            urljoin(homepage, "/favicon.svg"),
-            urljoin(homepage, "/logo.svg"),
-            urljoin(homepage, "/favicon.png"),
-            urljoin(homepage, "/logo.png"),
-            urljoin(homepage, "/favicon.ico"),
-        ])
-        domain = urlparse(homepage).netloc
-        if domain:
-            candidate_urls.append(self.favicon_url.format(domain=domain))
-
-        for url in dict.fromkeys(candidate_urls):
-            icon = await self._fetch_image(url)
-            if icon:
-                log.info("✓ Icon hit for %r via homepage (%s)", pkg_name or repo or homepage, url)
-                return icon, "homepage_favicon", url
-
         return None

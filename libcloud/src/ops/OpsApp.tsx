@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 import { Toaster } from "sonner";
 import {
   ArrowUpRight,
@@ -23,6 +24,9 @@ import { RunsPage } from "./pages/RunsPage";
 import { RunDetailPage } from "./pages/RunDetailPage";
 import { DetailPage } from "./pages/DetailPage";
 import { SearchPage } from "./pages/SearchPage";
+import { PRESETS, presetCssVars } from "../lib/presets";
+
+const OPS_THEME = presetCssVars(PRESETS.ink) as CSSProperties;
 
 const NAV: Array<{
   label: string;
@@ -114,15 +118,15 @@ export default function OpsApp() {
 
   if (!credentials) {
     return (
-      <>
+      <div data-theme="ink" style={OPS_THEME}>
         <Toaster richColors position="top-right" theme="dark" />
         <LoginGate onAuthenticated={setCredentials} />
-      </>
+      </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-canvas text-ink">
+    <div data-theme="ink" style={OPS_THEME} className="min-h-screen bg-canvas text-ink">
       <Toaster richColors position="top-right" theme="dark" />
 
       <header className="sticky top-0 z-30 border-b border-line bg-canvas/90 backdrop-blur">

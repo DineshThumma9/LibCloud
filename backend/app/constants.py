@@ -496,7 +496,7 @@ NORM_PY = {
     "langchain-nomic":"nomic",
     "langchain-voyageai":"voyageai",
     "requests-oauthlib":"requests",
-    "requests-tool"
+    "requests-toolbelt":"requests",
     # Data Science & ML
     "opencv-python": "OpenCV",
     "opencv-python-headless": "OpenCV",

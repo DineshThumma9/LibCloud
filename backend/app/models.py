@@ -159,6 +159,8 @@ PKG_MODELS = {
 }
 
 
+from typing import Any 
+
 
 class PKGInfo(BaseModel):
     dep_origin: str = ""
@@ -175,9 +177,6 @@ class PKGInfo(BaseModel):
         self.raw_names |= other.raw_names
         return self
 
-    def __or__(self, other: PKGInfo) -> PKGInfo:
-        return self.merge(other)
-
 
 def merge_pkg_dicts(target: dict[str, PKGInfo], source: dict[str, PKGInfo]) -> dict[str, PKGInfo]:
     for norm, info in source.items():
@@ -190,3 +189,19 @@ def merge_pkg_dicts(target: dict[str, PKGInfo], source: dict[str, PKGInfo]) -> d
                 raw_names=set(info.raw_names)
             )
     return target
+
+
+
+class Error(BaseModel):
+    phase: str
+    message: str
+    retryable: str
+    run_id: str = ""
+
+
+class Event(BaseModel):
+    job_id: str
+    type: str
+    ts: float
+    seq: int
+    data: Any

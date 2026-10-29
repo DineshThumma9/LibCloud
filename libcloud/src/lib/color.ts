@@ -118,7 +118,7 @@ export function normalizeIcon(icon?: string): string | undefined {
 
 const lightIconCache = new Map<string, boolean>();
 
-export function isLightSvgIcon(icon?: string): boolean {
+function isLightSvgIcon(icon?: string): boolean {
   if (!icon) return false;
   const cached = lightIconCache.get(icon);
   if (cached !== undefined) return cached;

@@ -79,25 +79,17 @@ Start the FastAPI app:
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-#### Endpoint: `GET /framecloud`
+#### Endpoint: `GET /libcloud`
+
+Streams scan progress as Server-Sent Events (`text/event-stream`).
 
 | Parameter | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `username` | `str` | Required | GitHub username |
-| `token` | `str` | `None` | Optional GitHub PAT |
-| `preset` | `str` | `"web"` | `"web"` (1400×900) or `"readme"` (920×540) |
-| `width` | `int` | `None` | Custom width in px |
-| `height` | `int` | `None` | Custom height in px |
-| `min_size` | `int` | `None` | Smallest logo size in px |
-| `max_size` | `int` | `None` | Largest logo size in px |
-| `padding` | `int` | `None` | Padding between logos in px |
-| `max_logos` | `int` | `None` | Max logos to place (default: all) |
-| `bg_color` | `str` | `None` | Background hex color (defaults to `#1a1b26` for dark, `#ffffff` for light) |
-| `theme` | `str` | `None` | `"dark"` (light logo plates) or `"light"` (original logos); inferred from `bg_color` when omitted |
+| `token` | `str` | `None` | Optional GitHub PAT; a bearer `Authorization` header is also accepted |
 
-The web client applies preset, size, sort, and max-logos settings locally. The
-display parameters above are accepted for API compatibility, but the current
-pipeline does not use them. Only `username` and the bearer token affect a scan.
+The web client applies preset, size, sort, and max-logos settings locally.
+Only `username` and the bearer token affect a scan.
 
 ### Ops dashboard (`/ops`)
 

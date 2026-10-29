@@ -101,7 +101,6 @@ class GraphGithubAPI:
         page = 0
         log.info("Fetching repos for user: %s (forks=%s, private=%s)", self.username, self.allow_fork, self.token_exists)
         total_so_far = 0 
-        count = 0 
         
         while has_next:
             page += 1
@@ -133,7 +132,6 @@ class GraphGithubAPI:
             has_next = page_info.get("hasNextPage", False)
             cursor = page_info.get("endCursor")
             total_so_far += len(nodes)
-            count += len(nodes)
             total_repos = len(nodes)*50
             if self.job_manager:
                 await self.job_manager.emit("repo.page", {
@@ -384,11 +382,5 @@ class GraphGithubAPI:
                     self.parser.export_unnormalized_csv(self.report_dir / "unnormalized.csv")
 
         return pkg_dics
-
-    def export_filtered_csv(self, filepath: str = "filtered_packages.csv"):
-        return self.parser.export_filtered_csv(filepath)
-
-    def export_unnormalized_csv(self, filepath: str = "unnormalized_packages.csv"):
-        return self.parser.export_unnormalized_csv(filepath)
 
 

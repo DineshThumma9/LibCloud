@@ -37,6 +37,17 @@ class TestImageValidation:
         assert valid is True
         assert "valid_png" in reason
 
+    def test_reject_default_sphinx_favicon(self):
+        # Google favicon proxy conversion of the Sphinx/Read the Docs default icon.
+        png = base64.b64decode(
+            "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAACVBMVEVGUVji5+uMoa9+AXGP"
+            "AAAALElEQVQ4jWNgoAtgggMghxEZUFMBgoKJ0l/BqDdpoYCgG+iggA7eJEMBjQEArjYC0yPH"
+            "5IIAAAAASUVORK5CYII="
+        )
+        valid, reason = ImageProcessor.validate_image(png)
+        assert valid is False
+        assert reason == "rejected_default_placeholder_favicon"
+
     def test_svg_content_is_preserved(self):
         svg = b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#fff"></rect><path fill="#010101" d="M0 0h10v10z"/></svg>'
         uri = ImageProcessor().to_data_uri(svg, "image/svg+xml")

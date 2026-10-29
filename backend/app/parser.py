@@ -266,9 +266,6 @@ class DependencyParser:
                 pkg.raw_names.add(raw)
         return pkg_dic
 
-    parse = parser
-    process = parser
-
     def normalize_pkg(self, dep_name: str, dep_origin: str) -> tuple[Optional[str], Optional[str]]:
         fname = Path(dep_origin).name
         lang = pkg_to_lang.get(fname)

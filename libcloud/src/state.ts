@@ -3,61 +3,24 @@ import { create } from "zustand";
 
 interface CloudState {
   logos: Map<string, Logo>;
-  phase: "idle" | "connecting" | "scanning" | "resolving" | "complete" | "error";
-  statusText: string;
-  stats: {
-    reposDone: number;
-    reposTotal: number;
-    packageFound: number;
-    iconsResolved: number;
-  };
-  error?: string;
 
   reset: () => void;
-  setPhase: (phase: CloudState['phase'], text?: string) => void;
   handleEvent: (eventType: string, data: any) => void;
 }
 
 export const useCloudStore = create<CloudState>((set, get) => ({
   logos: new Map(),
-  phase: "idle",
-  statusText: "Nothing Yet",
-  stats: {
-    reposDone: 0,
-    reposTotal: 0,
-    packageFound: 0,
-    iconsResolved: 0,
-  },
 
-  reset: () =>
-    set({
-      logos: new Map(),
-      phase: "idle",
-      statusText: "Nothing Yet",
-      stats: {
-        reposDone: 0,
-        reposTotal: 0,
-        packageFound: 0,
-        iconsResolved: 0,
-      },
-      error: undefined,
-    }),
-
-  setPhase: (phase, text) =>
-    set((s) => ({
-      phase,
-      statusText: text !== undefined ? text : s.statusText,
-    })),
+  reset: () => set({ logos: new Map() }),
 
   handleEvent: (eventType, data) => {
-    const { logos, stats } = get();
+    const { logos } = get();
 
     if (eventType === "package.found" || eventType === "packages.found") {
       const nextLogos = new Map(logos);
       const pkgs = Array.isArray(data.packages)
         ? data.packages
         : Object.values(data.packages || {});
-      let newCount = 0;
 
       for (const pkg of pkgs) {
         const slug = (pkg.slug || pkg.name || "").toLowerCase();
@@ -74,15 +37,10 @@ export const useCloudStore = create<CloudState>((set, get) => ({
             count: pkg.count || 1,
             status: "placeholder",
           });
-          newCount++;
         }
       }
 
-      set({
-        phase: "resolving",
-        logos: nextLogos,
-        stats: { ...stats, packageFound: stats.packageFound + newCount },
-      });
+      set({ logos: nextLogos });
     } else if (eventType === "icon.resolved") {
       const nextLogos = new Map(logos);
       const slug = (data.slug || data.name || "").toLowerCase();
@@ -102,10 +60,7 @@ export const useCloudStore = create<CloudState>((set, get) => ({
           status: "resolved",
         });
       }
-      set({
-        logos: nextLogos,
-        stats: { ...stats, iconsResolved: stats.iconsResolved + 1 },
-      });
+      set({ logos: nextLogos });
     } else if (eventType === "icon.failed") {
       const nextLogos = new Map(logos);
       const slug = (data.slug || data.name || "").toLowerCase();
@@ -114,10 +69,6 @@ export const useCloudStore = create<CloudState>((set, get) => ({
         nextLogos.set(slug, { ...existing, status: "failed" });
         set({ logos: nextLogos });
       }
-    } else if (eventType === "repo.scan.done") {
-      set({ stats: { ...stats, reposDone: stats.reposDone + 1 } });
-    } else if (eventType === "done") {
-      set({ phase: "complete", statusText: "Generation complete!" });
     }
   },
 }));

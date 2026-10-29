@@ -109,10 +109,6 @@ function withQuery(path: string, query: Record<string, string | number | undefin
   return suffix ? `${path}?${suffix}` : path;
 }
 
-export async function verifyCredentials(credentials: OpsCredentials): Promise<OpsSummary> {
-  return opsRequest<OpsSummary>(credentials, "/summary");
-}
-
 export async function getSummary(credentials: OpsCredentials): Promise<OpsSummary> {
   return opsRequest<OpsSummary>(credentials, "/summary");
 }

@@ -1,6 +1,6 @@
 import { readSSEStream, type StreamOptions } from "./streaming";
 
-export type LibCloudParams = {
+type LibCloudParams = {
   username: string;
   token?: string;
 };
@@ -15,7 +15,7 @@ export async function startLibCloudStream(
   options: StreamOptions = {}
 ): Promise<void> {
   const query = new URLSearchParams({ username: params.username.trim() });
-  const endpoint = `/framecloud/stream?${query.toString()}`;
+  const endpoint = `/libcloud?${query.toString()}`;
 
   const response = await fetch(endpoint, {
     method: "GET",
@@ -51,7 +51,7 @@ export async function startLibCloudStream(
   await readSSEStream(response, options);
 }
 
-export interface ShareResponse {
+interface ShareResponse {
   share_id: string;
   page_url: string;
   svg_url: string;

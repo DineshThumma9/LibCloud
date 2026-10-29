@@ -10,7 +10,6 @@ export default defineConfig({
   ],
   server: {
     proxy: {
-      '/framecloud': 'http://localhost:8000',
       '/libcloud': 'http://localhost:8000',
       '/api': 'http://localhost:8000',
       '/s/': 'http://localhost:8000',

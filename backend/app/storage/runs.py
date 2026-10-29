@@ -18,14 +18,6 @@ log = logging.getLogger(__name__)
 # Public detail kinds exposed by the dashboard and ops API.
 DETAIL_KINDS = ("resolved", "failures", "unnormalized", "filtered", "validation")
 
-_KIND_COLLECTIONS = {
-    "resolved": "run_resolved",
-    "failures": "run_failures",
-    "unnormalized": "run_unnormalized",
-    "filtered": "run_filtered",
-    "validation": "run_validation",
-}
-
 _SEARCH_FIELDS = {
     "resolved": ("norm_name", "slug"),
     "failures": ("norm_name", "raw_name", "slug_tried"),
@@ -161,15 +153,15 @@ class RunStore(BaseStore):
         await self._upsert_run(doc)
 
         details = {
-            "run_resolved": list(resolved),
-            "run_failures": list(failures),
-            "run_unnormalized": list(unnormalized),
-            "run_filtered": list(filtered),
-            "run_validation": list(validation),
+            "resolved": list(resolved),
+            "failures": list(failures),
+            "unnormalized": list(unnormalized),
+            "filtered": list(filtered),
+            "validation": list(validation),
         }
         self._mem_details[run.run_id] = details
-        for collection_name, rows in details.items():
-            await self._insert_details(collection_name, run, rows)
+        for kind, rows in details.items():
+            await self._insert_details(kind, run, rows)
 
     async def get_summary(self) -> dict[str, Any]:
         """Aggregate counts for the overview page, Mongo-first with memory fallback."""
@@ -256,7 +248,7 @@ class RunStore(BaseStore):
         try:
             details: dict[str, list[dict]] = {}
             for kind in DETAIL_KINDS:
-                collection = getattr(self, self._collection_attr(_KIND_COLLECTIONS[kind]))
+                collection = getattr(self, kind)
                 cursor = collection.find({"run_id": run_id}, {"_id": 0})
                 details[kind] = [_public_row(row) for row in await cursor.to_list(None)]
         except Exception as e:
@@ -289,7 +281,7 @@ class RunStore(BaseStore):
             if run_id:
                 query["run_id"] = run_id
             try:
-                collection = getattr(self, self._collection_attr(_KIND_COLLECTIONS[kind]))
+                collection = getattr(self, kind)
                 cursor = collection.find(query, {"_id": 0}).sort("count", -1).limit(limit)
                 return [_public_row(row) for row in await cursor.to_list(None)]
             except Exception as e:
@@ -315,7 +307,7 @@ class RunStore(BaseStore):
                 results: list[dict[str, Any]] = []
                 for kind in DETAIL_KINDS:
                     fields = _SEARCH_FIELDS[kind]
-                    collection = getattr(self, self._collection_attr(_KIND_COLLECTIONS[kind]))
+                    collection = getattr(self, kind)
                     cursor = collection.find(
                         {"$or": [{field: {"$regex": pattern, "$options": "i"}} for field in fields]},
                         {"_id": 0},
@@ -348,7 +340,7 @@ class RunStore(BaseStore):
     def _memory_details(self, run_id: str) -> dict[str, list[dict]]:
         stored = self._mem_details.get(run_id) or {}
         return {
-            kind: [_public_row(dict(row)) for row in stored.get(f"run_{kind}", [])]
+            kind: [_public_row(dict(row)) for row in stored.get(kind, [])]
             for kind in DETAIL_KINDS
         }
 
@@ -356,7 +348,7 @@ class RunStore(BaseStore):
         rows: list[dict[str, Any]] = []
         for run_id, stored in self._mem_details.items():
             run = self._mem_runs.get(run_id, {})
-            for row in stored.get(f"run_{kind}", []):
+            for row in stored.get(kind, []):
                 rows.append({**row, "run_id": run_id, "username": run.get("username", "")})
         return rows
 
@@ -376,10 +368,10 @@ class RunStore(BaseStore):
         except Exception as e:
             self._warn_db(e)
 
-    async def _insert_details(self, collection_name: str, run: RunContext, rows: list[dict]):
+    async def _insert_details(self, kind: str, run: RunContext, rows: list[dict]):
         if not rows or not self._db_available:
             return
-        collection = getattr(self, self._collection_attr(collection_name))
+        collection = getattr(self, kind)
         docs = [
             {**row, "run_id": run.run_id, "username": run.username}
             for row in rows
@@ -388,13 +380,3 @@ class RunStore(BaseStore):
             await collection.insert_many(docs)
         except Exception as e:
             self._warn_db(e)
-
-    @staticmethod
-    def _collection_attr(collection_name: str) -> str:
-        return {
-            "run_resolved": "resolved",
-            "run_failures": "failures",
-            "run_unnormalized": "unnormalized",
-            "run_filtered": "filtered",
-            "run_validation": "validation",
-        }[collection_name]

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import * as d3 from 'd3';
 import gsap from 'gsap';
-import type { PresetLayout, SortId } from './lib/presets';
+import { PRESETS, type PresetLayout, type SortId } from './lib/presets';
 import type { Logo } from './schemas';
 
 export interface SimNode extends d3.SimulationNodeDatum {
@@ -21,14 +21,7 @@ interface ForceLayoutOptions {
   onTick?: () => void;
 }
 
-const DEFAULT_LAYOUT: PresetLayout = {
-  charge: -8,
-  xStrength: 0.07,
-  yStrength: 0.07,
-  grid: 0,
-  radial: false,
-  hubBias: false,
-};
+const DEFAULT_LAYOUT: PresetLayout = PRESETS.paper.layout;
 
 /**
  * Pick a radius range that scales down as the cloud grows so every logo
@@ -38,7 +31,7 @@ const DEFAULT_LAYOUT: PresetLayout = {
  * backend SVG: most icons stay small, while the handful of very common
  * packages get a visibly larger mark.
  */
-export function getRadiusBounds(total: number) {
+function getRadiusBounds(total: number) {
   const safeTotal = Math.max(total, 1);
   const base = Math.min(24, Math.max(8, 18 * Math.sqrt(200 / safeTotal)));
   return {
@@ -63,6 +56,52 @@ export function getLogoRadius(
   // dominant-package rhythm.
   const exponent = sort === 'balanced' ? 0.55 : 1.2;
   return minRadius + Math.pow(weight, exponent) * (maxRadius - minRadius);
+}
+
+function createDragBehavior(
+  el: SVGGElement,
+  node: SimNode,
+  sim: d3.Simulation<SimNode, undefined>,
+  width: number,
+  height: number
+) {
+  return d3
+    .drag<SVGGElement, unknown>()
+    .on('start', (event) => {
+      if (!event.active) sim.alphaTarget(0.35).restart();
+      node.fx = node.x;
+      node.fy = node.y;
+      // GSAP: scale up and elevate on grab
+      const motionEl = el.querySelector('.logo-motion');
+      if (motionEl) {
+        gsap.to(motionEl, {
+          scale: 1.25,
+          duration: 0.2,
+          ease: 'power2.out',
+          overwrite: 'auto',
+        });
+      }
+    })
+    .on('drag', (event) => {
+      // Follow pointer and stay inside bounds
+      node.fx = Math.max(node.radius, Math.min(width - node.radius, event.x));
+      node.fy = Math.max(node.radius, Math.min(height - node.radius, event.y));
+    })
+    .on('end', (event) => {
+      if (!event.active) sim.alphaTarget(0);
+      node.fx = null;
+      node.fy = null;
+      // GSAP: bounce back into place on release
+      const motionEl = el.querySelector('.logo-motion');
+      if (motionEl) {
+        gsap.to(motionEl, {
+          scale: 1,
+          duration: 0.3,
+          ease: 'back.out(1.6)',
+          overwrite: 'auto',
+        });
+      }
+    });
 }
 
 export function useForceLayout(
@@ -219,47 +258,9 @@ export function useForceLayout(
     for (const [id, el] of nodeRefs.current.entries()) {
       const node = currentSimNodes.get(id);
       if (!node) continue;
-
-      const dragBehavior = d3
-        .drag<SVGGElement, unknown>()
-        .on('start', (event) => {
-          if (!event.active) sim.alphaTarget(0.35).restart();
-          node.fx = node.x;
-          node.fy = node.y;
-          // GSAP: scale up and elevate on grab
-          const motionEl = el.querySelector('.logo-motion');
-          if (motionEl) {
-            gsap.to(motionEl, {
-              scale: 1.25,
-              duration: 0.2,
-              ease: 'power2.out',
-              overwrite: 'auto',
-            });
-          }
-        })
-        .on('drag', (event) => {
-          // Follow pointer and stay inside bounds
-          node.fx = Math.max(node.radius, Math.min(width - node.radius, event.x));
-          node.fy = Math.max(node.radius, Math.min(height - node.radius, event.y));
-        })
-        .on('end', (event) => {
-          if (!event.active) sim.alphaTarget(0);
-          node.fx = null;
-          node.fy = null;
-          // GSAP: bounce back into place on release
-          const motionEl = el.querySelector('.logo-motion');
-          if (motionEl) {
-            gsap.to(motionEl, {
-              scale: 1,
-              duration: 0.3,
-              ease: 'back.out(1.6)',
-              overwrite: 'auto',
-            });
-          }
-        });
-
-      d3.select(el).on(".drag", null);
-      d3.select(el).call(dragBehavior);
+      d3.select(el)
+        .on(".drag", null)
+        .call(createDragBehavior(el, node, sim, width, height));
     }
 
     return () => {
@@ -276,43 +277,9 @@ export function useForceLayout(
       const node = simNodesRef.current.get(id);
       const sim = simRef.current;
       if (node && sim) {
-        const dragBehavior = d3
-          .drag<SVGGElement, unknown>()
-          .on('start', (event) => {
-            if (!event.active) sim.alphaTarget(0.35).restart();
-            node.fx = node.x;
-            node.fy = node.y;
-            const motionEl = el.querySelector('.logo-motion');
-            if (motionEl) {
-              gsap.to(motionEl, {
-                scale: 1.25,
-                duration: 0.2,
-                ease: 'power2.out',
-                overwrite: 'auto',
-              });
-            }
-          })
-          .on('drag', (event) => {
-            node.fx = Math.max(node.radius, Math.min(width - node.radius, event.x));
-            node.fy = Math.max(node.radius, Math.min(height - node.radius, event.y));
-          })
-          .on('end', (event) => {
-            if (!event.active) sim.alphaTarget(0);
-            node.fx = null;
-            node.fy = null;
-            const motionEl = el.querySelector('.logo-motion');
-            if (motionEl) {
-              gsap.to(motionEl, {
-                scale: 1,
-                duration: 0.3,
-                ease: 'back.out(1.6)',
-                overwrite: 'auto',
-              });
-            }
-          });
-
-        d3.select(el).on(".drag", null);
-        d3.select(el).call(dragBehavior);
+        d3.select(el)
+          .on(".drag", null)
+          .call(createDragBehavior(el, node, sim, width, height));
       }
     } else {
       nodeRefs.current.delete(id);

@@ -14,7 +14,7 @@ function App() {
   const [maxCount, setMaxCount] = useState<string>('100')
   const [username, setUsername] = useState<string>('')
   const [sort, setSort] = useState<SortId>('most-used')
-  const [presetId, setPresetId] = useState<PresetId>('ink')
+  const [presetId, setPresetId] = useState<PresetId>('paper')
   const [sizeId, setSizeId] = useState<SizeId>('web')
   const [showMissingLogos, setShowMissingLogos] = useState<boolean>(false)
   const [transparentChips, setTransparentChips] = useState<boolean>(false)

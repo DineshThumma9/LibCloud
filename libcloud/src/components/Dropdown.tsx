@@ -5,7 +5,6 @@ import { Check, ChevronDown } from "lucide-react";
 export type DropdownOption<T extends string> = {
   value: T;
   label: string;
-  meta?: string;
   description?: string;
   icon?: ReactNode;
 };
@@ -120,14 +119,7 @@ export function Dropdown<T extends string>({
                   >
                     {option.icon}
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate">{option.label}</span>
-                    {option.meta && (
-                      <span className="mt-0.5 block text-[10px] text-muted">
-                        {option.meta}
-                      </span>
-                    )}
-                  </span>
+                  <span className="min-w-0 flex-1 truncate">{option.label}</span>
                   {selected && (
                     <Check className="h-3.5 w-3.5 shrink-0 text-accent" />
                   )}

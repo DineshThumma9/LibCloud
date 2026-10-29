@@ -180,17 +180,3 @@ export type Logo = {
     icon?:string 
     status: "placeholder" | "resolved" | "failed"
 }
-
-
-
-
-export type Scene = {
-
-    logos:Map<string,Logo>
-    phase:"idle" | "connecting" | "scanning"| "resolving" | "complete" | "error"
-    stats:{
-        repoDone:number,
-        repoTotal:number,
-        iconResolved:number
-    }
-}

@@ -10,7 +10,7 @@ import {
   ShieldCheck,
   User,
 } from "lucide-react";
-import { OpsApiError, saveCredentials, verifyCredentials } from "./api";
+import { OpsApiError, getSummary, saveCredentials } from "./api";
 import type { OpsCredentials } from "./types";
 
 export function LoginGate({
@@ -37,7 +37,7 @@ export function LoginGate({
     setChecking(true);
     setError(null);
     try {
-      await verifyCredentials(credentials);
+      await getSummary(credentials);
       saveCredentials(credentials);
       onAuthenticated(credentials);
     } catch (reason) {

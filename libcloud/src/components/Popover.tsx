@@ -8,7 +8,6 @@ type PopoverProps = {
   onClose: () => void;
   children: ReactNode;
   width?: string;
-  align?: "left" | "right";
 };
 
 export function Popover({
@@ -19,7 +18,6 @@ export function Popover({
   onClose,
   children,
   width = "w-80",
-  align = "right",
 }: PopoverProps) {
   return (
     <div className="relative">
@@ -38,11 +36,7 @@ export function Popover({
         <>
           <div className="fixed inset-0 z-10" onClick={onClose} />
           <div
-            className={`fixed left-1/2 top-20 z-20 max-h-[calc(100vh-6rem)] -translate-x-1/2 overflow-y-auto rounded-xl border border-line bg-surface p-4 text-ink shadow-2xl sm:absolute sm:top-full sm:mt-2 sm:max-h-[calc(100vh-120px)] sm:translate-x-0 ${width} max-w-[calc(100vw-2rem)] ${
-              align === "right"
-                ? "sm:right-0 sm:left-auto"
-                : "sm:left-0 sm:right-auto"
-            }`}
+            className={`fixed left-1/2 top-20 z-20 max-h-[calc(100vh-6rem)] -translate-x-1/2 overflow-y-auto rounded-xl border border-line bg-surface p-4 text-ink shadow-2xl sm:absolute sm:top-full sm:mt-2 sm:max-h-[calc(100vh-120px)] sm:translate-x-0 sm:right-0 sm:left-auto ${width} max-w-[calc(100vw-2rem)]`}
           >
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-xs font-semibold uppercase tracking-wider text-muted">

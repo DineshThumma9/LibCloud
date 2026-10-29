@@ -1,6 +1,5 @@
 """Storage facade over the icon, repo, and share stores."""
 
-import logging
 from typing import Optional
 
 from app.config import settings
@@ -9,8 +8,6 @@ from app.storage.mongo import get_client
 from app.storage.repos import RepoStore
 from app.storage.runs import RunStore
 from app.storage.shares import ShareStore
-
-log = logging.getLogger(__name__)
 
 
 class DepsDB:
@@ -24,12 +21,6 @@ class DepsDB:
         self.repo_store = RepoStore(self.db)
         self.run_store = RunStore(self.db)
         self.share_store = ShareStore(self.db)
-
-    async def clear_all(self):
-        """Drops icon and repo collections and clears their in-memory caches."""
-        await self.icon_store.clear()
-        await self.repo_store.clear()
-        log.info("Cleared icon and repo collections in %s", self.db.name)
 
     async def save_icon(self, slug: str, icon_uri: str, source_url: str = ""):
         return await self.icon_store.save_icon(slug, icon_uri, source_url)

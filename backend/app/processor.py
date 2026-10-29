@@ -1,10 +1,23 @@
 import base64
+import hashlib
 import logging
 import struct
 import zlib
 from typing import Optional
 
 log = logging.getLogger(__name__)
+
+# Sphinx/Read the Docs serve this generic "building" favicon when a docs site
+# has no custom icon. Hashes cover the original ICO and Google's favicon proxy
+# PNG conversions (16, 24, and 32 px).
+# shortcut: exact hashes miss resized/recompressed variants; move to a
+# perceptual hash if other placeholder variants start showing up.
+_DEFAULT_FAVICON_HASHES = {
+    "4572d525a087c261031a23447de6eaaa37e399bd8283f6aaed7f1f23a66c9efd",
+    "18a50089a978a01e9e19b67cfedbffe2f837a38a6a50d8dcaac7b3b51fe114b6",
+    "038d03f0b9dd9506fe2408ac2ee534c98876ffc95f61978275f85f285c880050",
+    "000433a08e62149bd582f327c170254df0f312d2d3f4c4b88058278a7d3db4b6",
+}
 
 
 class ValidationResult(tuple):
@@ -39,6 +52,9 @@ class ImageProcessor:
         header = content[:1024].lower()
         if b"<!doctype html" in header or b"<html" in header:
             return ValidationResult(False, "is_html_page_not_image", "")
+
+        if hashlib.sha256(content).hexdigest() in _DEFAULT_FAVICON_HASHES:
+            return ValidationResult(False, "rejected_default_placeholder_favicon", "")
 
         # SVG Validation
         if b"<svg" in header or "svg" in mime_type:

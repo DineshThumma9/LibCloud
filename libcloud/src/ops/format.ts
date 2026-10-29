@@ -140,10 +140,6 @@ export function mergeUnique(
   );
 }
 
-export function pluralize(count: number, singular: string, plural = `${singular}s`): string {
-  return `${formatNumber(count)} ${count === 1 ? singular : plural}`;
-}
-
 export const DETAIL_LABELS: Record<OpsDetailKind, string> = {
   resolved: "Resolved",
   failures: "Failures",
