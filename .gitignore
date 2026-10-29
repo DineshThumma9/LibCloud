@@ -25,3 +25,5 @@ report.md
 backend/app/output
 backend/output
 backend/data/
+backend/.env.dev 
+*.env 

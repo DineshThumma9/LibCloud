@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/libcloud",
+      "destination": "https://libcloud.fastapicloud.dev/libcloud"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "https://libcloud.fastapicloud.dev/api/:path*"
+    },
+    {
+      "source": "/s/:path*",
+      "destination": "https://libcloud.fastapicloud.dev/s/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
